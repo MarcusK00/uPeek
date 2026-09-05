@@ -1,0 +1,15 @@
+{
+  "$schema": "../node_modules/@umbraco-cms/backoffice/umbraco-package-schema.json",
+  "id": "Umbraco.Community.Peek",
+  "name": "Peek",
+  "version": "0.1.0",
+  "allowTelemetry": true,
+  "extensions": [
+    {
+      "name": "Peek Bundle",
+      "alias": "Umbraco.Community.Peek.Bundle",
+      "type": "bundle",
+      "js": "/App_Plugins/Peek/peek.backoffice.js"
+    }
+  ]
+}

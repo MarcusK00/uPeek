@@ -1,0 +1,25 @@
+<Project>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!-- Shared package metadata. Only the packable project (src/Umbraco.Community.Peek) opts in. -->
+  <PropertyGroup>
+    <Authors>Marcus Krogh</Authors>
+    <Company>Umbraco HQ</Company>
+    <Copyright>Copyright © $([System.DateTime]::Now.Year)</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/mkrogh/Umbraco.Peek</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/mkrogh/Umbraco.Peek</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>umbraco umbraco-marketplace inspector content devtools</PackageTags>
+    <VersionPrefix>0.1.0</VersionPrefix>
+  </PropertyGroup>
+
+</Project>

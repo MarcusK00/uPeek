@@ -1,0 +1,43 @@
+<Project>
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!--
+      Floating versions let the package align with whatever Umbraco version the host site
+      resolves, which is what you want for an extension that supports a whole major.
+    -->
+    <CentralPackageFloatingVersionsEnabled>true</CentralPackageFloatingVersionsEnabled>
+    <UmbracoVersion>18.1.1</UmbracoVersion>
+  </PropertyGroup>
+
+  <ItemGroup Label="Umbraco">
+    <PackageVersion Include="Umbraco.Cms" Version="$(UmbracoVersion)" />
+    <PackageVersion Include="Umbraco.Cms.Api.Common" Version="$(UmbracoVersion)" />
+    <PackageVersion Include="Umbraco.Cms.Api.Management" Version="$(UmbracoVersion)" />
+    <PackageVersion Include="Umbraco.Cms.Core" Version="$(UmbracoVersion)" />
+    <PackageVersion Include="Umbraco.Cms.Infrastructure" Version="$(UmbracoVersion)" />
+    <PackageVersion Include="Umbraco.Cms.Web.Common" Version="$(UmbracoVersion)" />
+    <PackageVersion Include="Umbraco.Cms.Web.Website" Version="$(UmbracoVersion)" />
+  </ItemGroup>
+
+  <ItemGroup Label="Third party">
+    <!-- HTML parsing for the response matcher. -->
+    <PackageVersion Include="AngleSharp" Version="1.8.0" />
+    <!--
+      Referenced directly (rather than transitively) so the extension and the host site
+      resolve the same Microsoft.OpenApi version. See the note in the .csproj.
+    -->
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.ICU.ICU4C.Runtime" Version="72.1.0.3" />
+  </ItemGroup>
+
+  <ItemGroup Label="Testing">
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
+    <PackageVersion Include="NUnit" Version="4.6.1" />
+    <PackageVersion Include="NUnit3TestAdapter" Version="6.3.0" />
+    <PackageVersion Include="NSubstitute" Version="6.2.0" />
+    <PackageVersion Include="NUnit.Analyzers" Version="4.14.0" />
+    <PackageVersion Include="coverlet.collector" Version="10.0.1" />
+  </ItemGroup>
+
+</Project>

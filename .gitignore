@@ -1,0 +1,32 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+.vscode/*
+!.vscode/extensions.json
+artifacts/
+*.nupkg
+
+## Node
+node_modules/
+*.tsbuildinfo
+
+## Umbraco (test site runtime state)
+testsite/**/umbraco/Data/
+testsite/**/umbraco/Logs/
+testsite/**/umbraco/models/
+testsite/**/wwwroot/media/
+testsite/**/appsettings.Local.json
+*.sqlite.db
+*.sqlite.db-shm
+*.sqlite.db-wal
+
+## The compiled client bundle IS committed so the package runs without a node toolchain.
+## (see src/Umbraco.Community.Peek/Client/README.md)
+!src/Umbraco.Community.Peek/wwwroot/App_Plugins/Peek/**
+
+## OS
+.DS_Store
+Thumbs.db
