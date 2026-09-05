@@ -299,13 +299,6 @@ const M = (
 
 @keyframes peek-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
 
-.peek-pill .peek-hint {
-  color: var(--peek-text-dim);
-  font-weight: 500;
-  font-size: 11px;
-  font-family: var(--peek-mono);
-}
-
 .peek-pill button {
   all: unset;
   cursor: pointer;
@@ -318,6 +311,7 @@ const M = (
 
 .peek-pill button:hover { background: var(--peek-surface-2); color: var(--peek-text); }
 .peek-pill button[aria-pressed="true"] { background: var(--peek-block-soft); color: var(--peek-block); }
+.peek-pill button[hidden] { display: none; }
 
 /* ---------------------------------------------------------------- card */
 
@@ -630,15 +624,18 @@ const M = (
   Shared: "Shared",
   Media: "Media"
 };
-class U {
+class B {
   #h;
   #m;
-  #i;
-  #r = "dormant";
-  #a = null;
+  #r;
+  #a = "dormant";
+  #i = null;
   #t = null;
   #u;
   #s;
+  #T;
+  #x;
+  #v;
   #w;
   #c = null;
   #k = null;
@@ -646,70 +643,69 @@ class U {
   #o = !1;
   #n = 0;
   #d = /* @__PURE__ */ new Set();
-  #x = !1;
+  #y = !1;
   /** Usage counts are fetched lazily per node — the manifest should not pay for them. */
-  #f = /* @__PURE__ */ new Map();
+  #b = /* @__PURE__ */ new Map();
   constructor(e) {
-    this.#i = e, this.#m = o("div", { "data-peek-ui": "root" }), this.#m.style.setProperty("display", "contents"), this.#h = this.#m.attachShadow({ mode: "open" }), this.#h.append(o("style", { text: M })), document.body.append(this.#m), this.#L(), this.#A();
+    this.#r = e, this.#m = o("div", { "data-peek-ui": "root" }), this.#m.style.setProperty("display", "contents"), this.#h = this.#m.attachShadow({ mode: "open" }), this.#h.append(o("style", { text: M })), document.body.append(this.#m), this.#$(), this.#N();
   }
   // ------------------------------------------------------------------ chrome
-  #L() {
-    this.#u = o("div", { class: "peek-layer" }), this.#w = o("span", { text: "Peek" });
-    const e = o("button", { type: "button", "data-action": "toggle", text: "Inspect" }), t = o("button", {
+  #$() {
+    this.#u = o("div", { class: "peek-layer" }), this.#T = o("span", { text: "Peek" }), this.#x = o("button", { type: "button", "data-action": "toggle", text: "Inspect" }), this.#v = o("button", {
       type: "button",
       "data-action": "xray",
       "aria-pressed": "false",
       text: "X-ray"
-    });
-    this.#s = o(
+    }), this.#w = o("button", { type: "button", "data-action": "stop", hidden: "", text: "Stop" }), this.#s = o(
       "div",
       { class: "peek-pill", "data-state": "dormant", role: "group", "aria-label": "Peek content inspector" },
       o("span", { class: "peek-dot" }),
-      this.#w,
-      e,
-      t,
-      o("span", { class: "peek-hint", text: "⌃⇧U" })
-    ), e.addEventListener("click", (a) => {
-      a.stopPropagation(), this.toggle();
-    }), t.addEventListener("click", (a) => {
-      a.stopPropagation(), this.toggleXray();
-    }), this.#C(this.#s), this.#h.append(this.#u, this.#s);
+      this.#T,
+      this.#x,
+      this.#v,
+      this.#w
+    ), this.#x.addEventListener("click", (e) => {
+      e.stopPropagation(), this.toggle();
+    }), this.#v.addEventListener("click", (e) => {
+      e.stopPropagation(), this.toggleXray();
+    }), this.#w.addEventListener("click", (e) => {
+      e.stopPropagation(), this.disarm();
+    }), this.#I(this.#s), this.#h.append(this.#u, this.#s);
   }
   /** The pill will end up on top of somebody's chat widget. It has to be movable. */
-  #C(e) {
-    let t = !1, a = !1, i = 0, r = 0;
-    e.addEventListener("pointerdown", (d) => {
-      if (d.target.tagName === "BUTTON")
+  #I(e) {
+    let t = !1, a = 0, i = 0;
+    e.addEventListener("pointerdown", (n) => {
+      if (n.target.tagName === "BUTTON")
         return;
-      t = !0, a = !1;
-      const p = e.getBoundingClientRect();
-      i = d.clientX - p.left, r = d.clientY - p.top, e.setPointerCapture(d.pointerId), e.dataset.dragging = "true";
-    }), e.addEventListener("pointermove", (d) => {
+      t = !0;
+      const d = e.getBoundingClientRect();
+      a = n.clientX - d.left, i = n.clientY - d.top, e.setPointerCapture(n.pointerId), e.dataset.dragging = "true";
+    }), e.addEventListener("pointermove", (n) => {
       if (!t)
         return;
-      a = !0;
-      const p = Math.min(Math.max(0, d.clientX - i), window.innerWidth - e.offsetWidth), c = Math.min(Math.max(0, d.clientY - r), window.innerHeight - e.offsetHeight);
-      e.style.left = `${p}px`, e.style.top = `${c}px`, e.style.right = "auto", e.style.bottom = "auto";
+      const d = Math.min(Math.max(0, n.clientX - a), window.innerWidth - e.offsetWidth), p = Math.min(Math.max(0, n.clientY - i), window.innerHeight - e.offsetHeight);
+      e.style.left = `${d}px`, e.style.top = `${p}px`, e.style.right = "auto", e.style.bottom = "auto";
     });
-    const n = (d) => {
-      t && (t = !1, delete e.dataset.dragging, e.releasePointerCapture(d.pointerId), a || this.toggle());
+    const r = (n) => {
+      t && (t = !1, delete e.dataset.dragging, e.releasePointerCapture(n.pointerId));
     };
-    e.addEventListener("pointerup", n), e.addEventListener("pointercancel", n);
+    e.addEventListener("pointerup", r), e.addEventListener("pointercancel", r);
   }
-  #A() {
-    document.addEventListener("keydown", (a) => this.#U(a), !0), document.addEventListener("mousemove", (a) => this.#R(a), { passive: !0 }), document.addEventListener("click", (a) => this.#D(a), !0);
+  #N() {
+    document.addEventListener("keydown", (a) => this.#O(a), !0), document.addEventListener("mousemove", (a) => this.#U(a), { passive: !0 }), document.addEventListener("click", (a) => this.#z(a), !0);
     let e = 0;
     const t = () => {
-      cancelAnimationFrame(e), e = requestAnimationFrame(() => this.#M());
+      cancelAnimationFrame(e), e = requestAnimationFrame(() => this.#B());
     };
     window.addEventListener("resize", t, { passive: !0 }), window.addEventListener("scroll", t, { passive: !0, capture: !0 });
   }
   // ------------------------------------------------------------------ state
-  get #b() {
-    return this.#r === "armed" || this.#r === "locked" || this.#r === "xray";
+  get #g() {
+    return this.#a === "armed" || this.#a === "locked" || this.#a === "xray" || this.#a === "degraded";
   }
   #p(e) {
-    this.#r = e, this.#s.dataset.state = e;
+    this.#a = e, this.#s.dataset.state = e;
     const t = {
       dormant: "Peek",
       loading: "Reading page…",
@@ -719,73 +715,75 @@ class U {
       degraded: "Partial coverage",
       error: "Peek unavailable"
     };
-    this.#w.textContent = t[e];
+    this.#T.textContent = t[e];
+    const a = this.#g;
+    this.#x.hidden = a, this.#v.hidden = a, this.#w.hidden = !a;
   }
   async toggle() {
-    if (this.#b) {
+    if (this.#g) {
       this.disarm();
       return;
     }
     await this.arm();
   }
   async arm() {
-    if (!this.#a && (this.#p("loading"), !await this.#$())) {
-      this.#p("error"), this.#W("Peek could not read this page. It may not be an Umbraco-routed document.");
+    if (!this.#i && (this.#p("loading"), !await this.#M())) {
+      this.#p("error"), this.#J("Peek could not read this page. It may not be an Umbraco-routed document.");
       return;
     }
-    this.#t = S(this.#a), this.#p(this.#t.coverage < x ? "degraded" : "armed"), this.#g();
+    this.#t = S(this.#i), this.#p(this.#t.coverage < x ? "degraded" : "armed"), this.#f();
   }
   disarm() {
-    this.#o = !1, this.#e = null, this.#p("dormant"), m(this.#u), this.#v(), this.#E(), this.#s.querySelector('[data-action="xray"]')?.setAttribute("aria-pressed", "false");
+    this.#o = !1, this.#e = null, this.#p("dormant"), m(this.#u), this.#E(), this.#S(), this.#s.querySelector('[data-action="xray"]')?.setAttribute("aria-pressed", "false");
   }
   async toggleXray() {
-    if (this.#r === "xray") {
-      this.#E(), this.#p("armed"), this.#s.querySelector('[data-action="xray"]')?.setAttribute("aria-pressed", "false"), this.#g();
+    if (this.#a === "xray") {
+      this.#S(), this.#p("armed"), this.#s.querySelector('[data-action="xray"]')?.setAttribute("aria-pressed", "false"), this.#f();
       return;
     }
-    !this.#b && (await this.arm(), this.#r === "error") || (this.#p("xray"), this.#s.querySelector('[data-action="xray"]')?.setAttribute("aria-pressed", "true"), this.#g(), this.#T());
+    !this.#g && (await this.arm(), this.#a === "error") || (this.#p("xray"), this.#s.querySelector('[data-action="xray"]')?.setAttribute("aria-pressed", "true"), this.#f(), this.#L());
   }
   // ------------------------------------------------------------------ data
-  async #$() {
-    if (!this.#i.pageKey)
+  async #M() {
+    if (!this.#r.pageKey)
       return !1;
-    const e = new URL(this.#i.manifestUrl, window.location.origin);
-    e.searchParams.set("key", this.#i.pageKey), this.#i.culture && e.searchParams.set("culture", this.#i.culture), this.#i.segment && e.searchParams.set("segment", this.#i.segment), this.#i.preview && e.searchParams.set("preview", "true");
+    const e = new URL(this.#r.manifestUrl, window.location.origin);
+    e.searchParams.set("key", this.#r.pageKey), this.#r.culture && e.searchParams.set("culture", this.#r.culture), this.#r.segment && e.searchParams.set("segment", this.#r.segment), this.#r.preview && e.searchParams.set("preview", "true");
     try {
       const t = await fetch(e, { credentials: "same-origin", headers: { accept: "application/json" } });
-      return t.ok ? (this.#a = await t.json(), !0) : !1;
+      return t.ok ? (this.#i = await t.json(), !0) : !1;
     } catch {
       return !1;
     }
   }
-  async #I(e) {
-    if (this.#f.has(e))
+  async #R(e) {
+    if (this.#b.has(e))
       return;
-    this.#f.set(e, "pending");
-    const t = new URL(this.#i.usageUrl, window.location.origin);
+    this.#b.set(e, "pending");
+    const t = new URL(this.#r.usageUrl, window.location.origin);
     t.searchParams.set("key", e);
     try {
       const a = await fetch(t, { credentials: "same-origin", headers: { accept: "application/json" } });
-      this.#f.set(
+      this.#b.set(
         e,
         a.ok ? await a.json() : "error"
       );
     } catch {
-      this.#f.set(e, "error");
+      this.#b.set(e, "error");
     }
     this.#e && this.#l(this.#e);
   }
-  #y(e) {
-    return this.#a?.nodes.find((t) => t.key === e);
+  #P(e) {
+    return this.#i?.nodes.find((t) => t.key === e);
   }
   // ------------------------------------------------------------------ highlights
-  #g() {
+  #f() {
     if (m(this.#u), !!this.#t) {
       for (const e of this.#t.regions) {
         const t = e.entries[0];
-        this.#d.has(t.sourceKind) || this.#u.append(this.#N(e));
+        this.#d.has(t.sourceKind) || this.#u.append(this.#D(e));
       }
-      if (this.#r === "xray" && this.#x)
+      if (this.#a === "xray" && this.#y)
         for (const e of this.#t.unattributed) {
           const t = e.getBoundingClientRect();
           t.width === 0 && t.height === 0 || this.#u.append(
@@ -798,7 +796,7 @@ class U {
         }
     }
   }
-  #N(e) {
+  #D(e) {
     const t = e.element.getBoundingClientRect(), a = e.entries[0], i = o("div", {
       class: "peek-highlight",
       "data-kind": a.sourceKind,
@@ -807,34 +805,34 @@ class U {
     });
     return e.entries.length > 1 && i.append(o("span", { class: "peek-ambiguous-badge", text: "?", title: `${e.entries.length} possible sources` })), i;
   }
-  #M() {
-    this.#b && (this.#g(), this.#e && this.#S(this.#e));
+  #B() {
+    this.#g && (this.#f(), this.#e && this.#A(this.#e));
   }
   // ------------------------------------------------------------------ interaction
-  #R(e) {
-    if (this.#r !== "armed" && this.#r !== "degraded" && this.#r !== "xray" || this.#o || !this.#t)
+  #U(e) {
+    if (this.#a !== "armed" && this.#a !== "degraded" && this.#a !== "xray" || this.#o || !this.#t)
       return;
-    const t = this.#P(e.clientX, e.clientY);
-    t !== this.#e && (this.#e = t, this.#n = 0, t ? this.#l(t) : this.#v());
+    const t = this.#C(e.clientX, e.clientY);
+    t !== this.#e && (this.#e = t, this.#n = 0, t ? this.#l(t) : this.#E());
   }
-  #D(e) {
-    if (!this.#b)
+  #z(e) {
+    if (!this.#g)
       return;
     const t = e.composedPath();
     if (t.includes(this.#s) || this.#c && t.includes(this.#c) || this.#k && t.includes(this.#k))
       return;
-    const a = this.#P(e.clientX, e.clientY);
+    const a = this.#C(e.clientX, e.clientY);
     a && (e.preventDefault(), e.stopPropagation(), this.#o = !0, this.#e = a, this.#n = 0, this.#p("locked"), this.#l(a));
   }
-  #U(e) {
+  #O(e) {
     if (e.ctrlKey && e.shiftKey && e.code === "KeyU") {
       e.preventDefault(), this.toggle();
       return;
     }
-    if (!this.#b)
+    if (!this.#g)
       return;
     if (e.key === "Escape") {
-      e.preventDefault(), this.#o ? (this.#o = !1, this.#p(this.#k ? "xray" : "armed"), this.#v()) : this.disarm();
+      e.preventDefault(), this.#o ? (this.#o = !1, this.#p(this.#k ? "xray" : "armed"), this.#E()) : this.disarm();
       return;
     }
     if (!this.#o || !this.#e)
@@ -852,7 +850,7 @@ class U {
       }
       case "ArrowLeft":
       case "ArrowRight": {
-        e.preventDefault(), this.#B(e.key === "ArrowRight" ? 1 : -1);
+        e.preventDefault(), this.#K(e.key === "ArrowRight" ? 1 : -1);
         return;
       }
       case "Enter": {
@@ -864,7 +862,7 @@ class U {
     }
   }
   /** Walk to the next or previous region in document order, so the page can be traversed. */
-  #B(e) {
+  #K(e) {
     if (!this.#t || !this.#e)
       return;
     const t = this.#t.regions.filter((r) => !this.#d.has(r.entries[0].sourceKind)), a = t.indexOf(this.#e);
@@ -873,7 +871,7 @@ class U {
     const i = t[(a + e + t.length) % t.length];
     this.#e = i, this.#n = 0, i.element.scrollIntoView({ block: "center", behavior: "smooth" }), this.#l(i);
   }
-  #P(e, t) {
+  #C(e, t) {
     if (!this.#t)
       return null;
     let a = null, i = Number.POSITIVE_INFINITY;
@@ -889,12 +887,12 @@ class U {
     return a;
   }
   // ------------------------------------------------------------------ card
-  #v() {
+  #E() {
     this.#c?.remove(), this.#c = null;
   }
   #l(e) {
-    this.#v();
-    const t = e.entries[this.#n] ?? e.entries[0], a = this.#y(t.nodeKey), i = o("div", {
+    this.#E();
+    const t = e.entries[this.#n] ?? e.entries[0], a = this.#P(t.nodeKey), i = o("div", {
       class: "peek-card",
       "data-kind": t.sourceKind,
       "data-pinned": String(this.#o),
@@ -902,19 +900,19 @@ class U {
     });
     i.append(o("div", { class: "peek-card-accent" }));
     const r = o("div", { class: "peek-card-body" });
-    if (r.append(this.#z(t, a)), r.append(this.#O(t, a)), e.entries.length > 1 && r.append(this.#K(e)), r.append(
+    if (r.append(this.#F(t, a)), r.append(this.#_(t, a)), e.entries.length > 1 && r.append(this.#H(e)), r.append(
       o("p", {
         class: "peek-value",
         "data-empty": String(!t.valuePreview),
         text: t.valuePreview || "(empty)"
       })
-    ), r.append(this.#F(t, a)), r.append(this.#_(t, a)), this.#o) {
+    ), r.append(this.#V(t, a)), r.append(this.#j(t, a)), this.#o) {
       const n = o("div", { class: "peek-keyhint" });
       n.innerHTML = "<kbd>←</kbd><kbd>→</kbd> next region · <kbd>↑</kbd><kbd>↓</kbd> candidates · <kbd>Enter</kbd> open · <kbd>Esc</kbd> close", r.append(n);
     }
-    i.append(r), this.#c = i, this.#h.append(i), this.#S(e), t.sourceKind === "Shared" && a && this.#I(a.key);
+    i.append(r), this.#c = i, this.#h.append(i), this.#A(e), t.sourceKind === "Shared" && a && this.#R(a.key);
   }
-  #z(e, t) {
+  #F(e, t) {
     const a = o("div", { class: "peek-tags" });
     if (a.append(
       o("span", {
@@ -937,7 +935,7 @@ class U {
         text: "draft pending"
       })
     ) : t?.publishState === "Unpublished" && a.append(o("span", { class: "peek-tag", "data-tone": "warn", text: "unpublished" })), e.sourceKind === "Shared" && t) {
-      const i = this.#f.get(t.key), r = i === "pending" || i === void 0 ? "checking usage…" : i === "error" ? "usage unknown" : `used on ${i.length}`;
+      const i = this.#b.get(t.key), r = i === "pending" || i === void 0 ? "checking usage…" : i === "error" ? "usage unknown" : `used on ${i.length}`;
       a.append(
         o("span", {
           class: "peek-tag",
@@ -949,8 +947,8 @@ class U {
     }
     return a;
   }
-  #O(e, t) {
-    const a = o("div", { class: "peek-breadcrumb" }), i = [this.#a?.page?.name ?? t?.name ?? "Page", ...e.breadcrumb.map((r) => r.label)];
+  #_(e, t) {
+    const a = o("div", { class: "peek-breadcrumb" }), i = [this.#i?.page?.name ?? t?.name ?? "Page", ...e.breadcrumb.map((r) => r.label)];
     return i.forEach((r, n) => {
       n > 0 && a.append(o("span", { class: "peek-crumb-sep", text: "›" })), a.append(
         o("span", {
@@ -960,10 +958,10 @@ class U {
       );
     }), a;
   }
-  #K(e) {
+  #H(e) {
     const t = o("ul", { class: "peek-candidates", role: "listbox" });
     e.entries.forEach((i, r) => {
-      const n = this.#y(i.nodeKey), d = o("li", {
+      const n = this.#P(i.nodeKey), d = o("li", {
         role: "option",
         "aria-selected": String(r === this.#n),
         text: `${n?.contentTypeAlias ?? "?"}.${i.propertyAlias}`
@@ -979,7 +977,7 @@ class U {
     });
     return o("div", {}, a, t);
   }
-  #F(e, t) {
+  #V(e, t) {
     const a = o("dl", { class: "peek-meta" }), i = [
       ["Node", t?.name ?? "—"],
       ["Doc type", t?.contentTypeAlias ?? "—"],
@@ -992,7 +990,7 @@ class U {
       a.append(o("dt", { text: r }), o("dd", { text: n }));
     return a;
   }
-  #_(e, t) {
+  #j(e, t) {
     const a = o("div", { class: "peek-actions" });
     e.editUrl && a.append(
       o("a", {
@@ -1007,7 +1005,7 @@ class U {
       ["Alias", e.propertyAlias],
       ["GUID", e.nodeKey],
       ["Razor", i],
-      ["Bug report", this.#H(e, t)]
+      ["Bug report", this.#q(e, t)]
     ];
     for (const [n, d] of r) {
       const p = o("button", { type: "button", text: n });
@@ -1021,7 +1019,7 @@ class U {
     }
     return a;
   }
-  #H(e, t) {
+  #q(e, t) {
     return [
       `URL: ${window.location.href}`,
       `Node: ${t?.name ?? "—"} (${e.nodeKey})`,
@@ -1033,7 +1031,7 @@ class U {
     ].join(`
 `);
   }
-  #S(e) {
+  #A(e) {
     if (!this.#c)
       return;
     const t = e.element.getBoundingClientRect(), a = this.#c, i = a.offsetWidth || 340, r = a.offsetHeight || 220;
@@ -1041,25 +1039,25 @@ class U {
     n + i > window.innerWidth - 12 && (n = window.innerWidth - i - 12), d + r > window.innerHeight - 12 && (d = Math.max(12, t.top - r - 8)), a.style.left = `${Math.max(12, n)}px`, a.style.top = `${d}px`;
   }
   // ------------------------------------------------------------------ x-ray panel
-  #E() {
+  #S() {
     this.#k?.remove(), this.#k = null;
   }
-  #T() {
-    if (this.#E(), !this.#a || !this.#t)
+  #L() {
+    if (this.#S(), !this.#i || !this.#t)
       return;
     const e = o("div", { class: "peek-panel", "data-peek-ui": "panel" });
-    e.append(this.#V());
-    for (const t of this.#a.warnings)
+    e.append(this.#Y());
+    for (const t of this.#i.warnings)
       e.append(o("div", { class: "peek-notice", text: t }));
-    e.append(this.#q()), e.append(
+    e.append(this.#X()), e.append(
       o("div", {
         class: "peek-panel-foot",
-        text: `${this.#a.entries.length} values considered · built in ${this.#a.buildDurationMs} ms`
+        text: `${this.#i.entries.length} values considered · built in ${this.#i.buildDurationMs} ms`
       })
     ), this.#k = e, this.#h.append(e);
   }
-  #V() {
-    const e = this.#a, t = this.#t, a = Math.round(t.coverage * 100), i = o("div", { class: "peek-panel-head" });
+  #Y() {
+    const e = this.#i, t = this.#t, a = Math.round(t.coverage * 100), i = o("div", { class: "peek-panel-head" });
     i.append(
       o(
         "div",
@@ -1081,9 +1079,9 @@ class U {
           o("span", { text: `${t.unattributed.length} unattributed` })
         )
       )
-    ), i.append(this.#j()), i;
+    ), i.append(this.#W()), i;
   }
-  #j() {
+  #W() {
     const e = o("div", { class: "peek-chips" }), t = [
       ["OwnedProperty", "owned", "This page"],
       ["Block", "block", "Blocks"],
@@ -1103,7 +1101,7 @@ class U {
         document.createTextNode(n)
       );
       d.addEventListener("click", () => {
-        this.#d.has(i) ? this.#d.delete(i) : this.#d.add(i), this.#g(), this.#T();
+        this.#d.has(i) ? this.#d.delete(i) : this.#d.add(i), this.#f(), this.#L();
       }), e.append(d);
     }
     const a = o(
@@ -1112,18 +1110,18 @@ class U {
         class: "peek-chip",
         type: "button",
         "data-tone": "unattributed",
-        "aria-pressed": String(this.#x),
+        "aria-pressed": String(this.#y),
         title: "Text Peek could not trace back to a content property."
       },
       o("i", {}),
       document.createTextNode("Unattributed")
     );
     return a.addEventListener("click", () => {
-      this.#x = !this.#x, this.#g(), this.#T();
+      this.#y = !this.#y, this.#f(), this.#L();
     }), e.append(a), e;
   }
-  #q() {
-    const e = o("div", { class: "peek-panel-list" }), t = this.#a, a = this.#t, i = t.entries.filter(
+  #X() {
+    const e = o("div", { class: "peek-panel-list" }), t = this.#i, a = this.#t, i = t.entries.filter(
       (n) => !this.#d.has(n.sourceKind) && n.state !== "Empty"
     );
     if (i.length === 0)
@@ -1133,11 +1131,11 @@ class U {
       return p(n) - p(d);
     });
     for (const n of r)
-      e.append(this.#Y(n, a.matchedEntryIds.has(n.id)));
+      e.append(this.#G(n, a.matchedEntryIds.has(n.id)));
     return e;
   }
-  #Y(e, t) {
-    const a = this.#y(e.nodeKey), i = t ? e.valuePreview ?? "" : e.state === "Unmatchable" ? `has a value Peek can't search for (${e.unmatchable})` : "read, not rendered", r = o(
+  #G(e, t) {
+    const a = this.#P(e.nodeKey), i = t ? e.valuePreview ?? "" : e.state === "Unmatchable" ? `has a value Peek can't search for (${e.unmatchable})` : "read, not rendered", r = o(
       "button",
       {
         class: "peek-row",
@@ -1164,7 +1162,7 @@ class U {
       n ? (this.#o = !0, this.#e = n, this.#n = n.entries.findIndex((d) => d.id === e.id), n.element.scrollIntoView({ block: "center", behavior: "smooth" }), this.#l(n)) : e.editUrl && window.open(e.editUrl, "_blank", "noopener");
     }), r;
   }
-  #W(e) {
+  #J(e) {
     const t = o("div", { class: "peek-notice", "data-peek-ui": "notice", text: e });
     t.style.position = "absolute", t.style.right = "20px", t.style.bottom = "74px", t.style.maxWidth = "320px", t.style.pointerEvents = "auto", this.#h.append(t), setTimeout(() => t.remove(), 6e3);
   }
@@ -1172,9 +1170,9 @@ class U {
 function v(s) {
   return `left:${s.left}px;top:${s.top}px;width:${s.width}px;height:${s.height}px`;
 }
-const B = "peek-bootstrap", w = 1;
+const U = "peek-bootstrap", w = 1;
 function z() {
-  const s = document.getElementById(B);
+  const s = document.getElementById(U);
   if (!s?.textContent)
     return null;
   try {
@@ -1190,7 +1188,7 @@ function y() {
   const s = z();
   if (!s)
     return;
-  const e = new U(s);
+  const e = new B(s);
   new URLSearchParams(window.location.search).get("peek") !== null && e.arm();
 }
 document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", y, { once: !0 }) : y();
