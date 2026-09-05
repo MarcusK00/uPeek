@@ -136,13 +136,6 @@ export const OVERLAY_STYLES = /* css */ `
 
 @keyframes peek-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
 
-.peek-pill .peek-hint {
-  color: var(--peek-text-dim);
-  font-weight: 500;
-  font-size: 11px;
-  font-family: var(--peek-mono);
-}
-
 .peek-pill button {
   all: unset;
   cursor: pointer;
@@ -155,6 +148,7 @@ export const OVERLAY_STYLES = /* css */ `
 
 .peek-pill button:hover { background: var(--peek-surface-2); color: var(--peek-text); }
 .peek-pill button[aria-pressed="true"] { background: var(--peek-block-soft); color: var(--peek-block); }
+.peek-pill button[hidden] { display: none; }
 
 /* ---------------------------------------------------------------- card */
 

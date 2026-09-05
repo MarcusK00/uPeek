@@ -41,6 +41,9 @@ export class PeekOverlay {
   #layer!: HTMLDivElement;
   #pill!: HTMLDivElement;
   #pillLabel!: HTMLSpanElement;
+  #inspectButton!: HTMLButtonElement;
+  #xrayButton!: HTMLButtonElement;
+  #stopButton!: HTMLButtonElement;
   #card: HTMLDivElement | null = null;
   #panel: HTMLDivElement | null = null;
 
@@ -74,32 +77,38 @@ export class PeekOverlay {
 
     this.#pillLabel = el('span', { text: 'Peek' });
 
-    const inspectButton = el('button', { type: 'button', 'data-action': 'toggle', text: 'Inspect' });
-    const xrayButton = el('button', {
+    this.#inspectButton = el('button', { type: 'button', 'data-action': 'toggle', text: 'Inspect' });
+    this.#xrayButton = el('button', {
       type: 'button',
       'data-action': 'xray',
       'aria-pressed': 'false',
       text: 'X-ray',
     });
+    this.#stopButton = el('button', { type: 'button', 'data-action': 'stop', hidden: '', text: 'Stop' });
 
     this.#pill = el(
       'div',
       { class: 'peek-pill', 'data-state': 'dormant', role: 'group', 'aria-label': 'Peek content inspector' },
       el('span', { class: 'peek-dot' }),
       this.#pillLabel,
-      inspectButton,
-      xrayButton,
-      el('span', { class: 'peek-hint', text: '⌃⇧U' }),
+      this.#inspectButton,
+      this.#xrayButton,
+      this.#stopButton,
     );
 
-    inspectButton.addEventListener('click', (event) => {
+    this.#inspectButton.addEventListener('click', (event) => {
       event.stopPropagation();
       void this.toggle();
     });
 
-    xrayButton.addEventListener('click', (event) => {
+    this.#xrayButton.addEventListener('click', (event) => {
       event.stopPropagation();
       void this.toggleXray();
+    });
+
+    this.#stopButton.addEventListener('click', (event) => {
+      event.stopPropagation();
+      this.disarm();
     });
 
     this.#makeDraggable(this.#pill);
@@ -110,7 +119,6 @@ export class PeekOverlay {
   /** The pill will end up on top of somebody's chat widget. It has to be movable. */
   #makeDraggable(pill: HTMLElement): void {
     let dragging = false;
-    let moved = false;
     let offsetX = 0;
     let offsetY = 0;
 
@@ -120,7 +128,6 @@ export class PeekOverlay {
       }
 
       dragging = true;
-      moved = false;
       const rect = pill.getBoundingClientRect();
       offsetX = event.clientX - rect.left;
       offsetY = event.clientY - rect.top;
@@ -133,7 +140,6 @@ export class PeekOverlay {
         return;
       }
 
-      moved = true;
       const left = Math.min(Math.max(0, event.clientX - offsetX), window.innerWidth - pill.offsetWidth);
       const top = Math.min(Math.max(0, event.clientY - offsetY), window.innerHeight - pill.offsetHeight);
       pill.style.left = `${left}px`;
@@ -150,10 +156,6 @@ export class PeekOverlay {
       dragging = false;
       delete pill.dataset.dragging;
       pill.releasePointerCapture(event.pointerId);
-
-      if (!moved) {
-        void this.toggle();
-      }
     };
 
     pill.addEventListener('pointerup', end);
@@ -178,7 +180,12 @@ export class PeekOverlay {
   // ------------------------------------------------------------------ state
 
   get #armed(): boolean {
-    return this.#state === 'armed' || this.#state === 'locked' || this.#state === 'xray';
+    return (
+      this.#state === 'armed' ||
+      this.#state === 'locked' ||
+      this.#state === 'xray' ||
+      this.#state === 'degraded'
+    );
   }
 
   #setState(state: PeekState): void {
@@ -196,6 +203,11 @@ export class PeekOverlay {
     };
 
     this.#pillLabel.textContent = labels[state];
+
+    const active = this.#armed;
+    this.#inspectButton.hidden = active;
+    this.#xrayButton.hidden = active;
+    this.#stopButton.hidden = !active;
   }
 
   async toggle(): Promise<void> {
