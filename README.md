@@ -1,4 +1,4 @@
-# Peek — Content Inspector for Umbraco
+# Peek - Content Inspector for Umbraco
 
 **View Source, but for content.**
 
