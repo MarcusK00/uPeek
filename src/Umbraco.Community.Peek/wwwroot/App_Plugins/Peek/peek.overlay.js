@@ -1,8 +1,8 @@
-function S(o) {
-  if (!o)
+function S(s) {
+  if (!s)
     return "";
   let e = "", t = !1;
-  for (const a of o) {
+  for (const a of s) {
     if (/\s/.test(a) || a === " " || a === "​") {
       t = e.length > 0;
       continue;
@@ -21,20 +21,20 @@ const T = /* @__PURE__ */ new Set([
   "META",
   "LINK"
 ]);
-function A(o) {
-  return T.has(o.tagName);
+function A(s) {
+  return T.has(s.tagName);
 }
-function L(o) {
+function L(s) {
   const e = /* @__PURE__ */ new Map(), t = [];
-  for (const p of o.entries)
+  for (const p of s.entries)
     for (const h of p.matchTexts) {
       const c = h.toLowerCase(), u = e.get(c);
       u ? u.push(p) : e.set(c, [p]), t.push({ entry: p, fragment: c });
     }
   t.sort((p, h) => h.fragment.length - p.fragment.length);
-  const a = /* @__PURE__ */ new Map(), i = [], r = /* @__PURE__ */ new Set(), s = o.matching.minimumValueLength;
+  const a = /* @__PURE__ */ new Map(), i = [], r = /* @__PURE__ */ new Set(), o = s.matching.minimumValueLength;
   let d = 0, l = 0;
-  for (const p of I(document.body, s)) {
+  for (const p of I(document.body, o)) {
     d++;
     const h = S(p.text).toLowerCase();
     let c = e.get(h), u = "exact";
@@ -52,37 +52,37 @@ function L(o) {
     for (const k of c)
       r.add(k.id);
   }
-  return C(o, a, r), $(o, a, r, s), {
+  return C(s, a, r), $(s, a, r, o), {
     regions: [...a.values()],
     unattributed: i,
     coverage: d === 0 ? 0 : l / d,
     matchedEntryIds: r
   };
 }
-function g(o, e, t, a) {
-  const i = o.get(e);
+function g(s, e, t, a) {
+  const i = s.get(e);
   if (!i) {
-    o.set(e, { element: e, entries: [...t], confidence: a });
+    s.set(e, { element: e, entries: [...t], confidence: a });
     return;
   }
   for (const r of t)
-    i.entries.some((s) => s.id === r.id) || i.entries.push(r);
+    i.entries.some((o) => o.id === r.id) || i.entries.push(r);
 }
-function C(o, e, t) {
-  const a = o.entries.filter((r) => r.mediaUrl);
+function C(s, e, t) {
+  const a = s.entries.filter((r) => r.mediaUrl);
   if (a.length === 0)
     return;
   const i = document.querySelectorAll('img, picture source, video, [style*="url("]');
   for (const r of i) {
-    const s = [
+    const o = [
       r.getAttribute("src"),
       r.getAttribute("srcset"),
       r.getAttribute("poster"),
       r.getAttribute("style")
     ].filter(Boolean).join(" ").toLowerCase();
-    if (s) {
+    if (o) {
       for (const d of a)
-        if (s.includes(d.mediaUrl.toLowerCase())) {
+        if (o.includes(d.mediaUrl.toLowerCase())) {
           const l = r.tagName === "SOURCE" ? r.parentElement ?? r : r;
           g(e, l, [d], "media"), t.add(d.id);
         }
@@ -90,30 +90,30 @@ function C(o, e, t) {
   }
 }
 const m = ["href", "src", "srcset", "action", "poster", "content", "value"];
-function $(o, e, t, a) {
-  const i = o.entries.filter(
-    (s) => !t.has(s.id) && s.matchTexts.length > 0
+function $(s, e, t, a) {
+  const i = s.entries.filter(
+    (o) => !t.has(o.id) && o.matchTexts.length > 0
   );
   if (i.length === 0)
     return;
-  const r = m.map((s) => `[${s}]`).join(",");
-  for (const s of document.querySelectorAll(r)) {
-    if (s.closest("[data-peek-ui]"))
+  const r = m.map((o) => `[${o}]`).join(",");
+  for (const o of document.querySelectorAll(r)) {
+    if (o.closest("[data-peek-ui]"))
       continue;
-    const d = m.map((l) => s.getAttribute(l)).filter((l) => !!l && l.length >= a).join(" ").toLowerCase();
+    const d = m.map((l) => o.getAttribute(l)).filter((l) => !!l && l.length >= a).join(" ").toLowerCase();
     if (d)
       for (const l of i)
-        l.matchTexts.some((p) => d.includes(p.toLowerCase())) && (g(e, s, [l], "attribute"), t.add(l.id));
+        l.matchTexts.some((p) => d.includes(p.toLowerCase())) && (g(e, o, [l], "attribute"), t.add(l.id));
   }
 }
-function I(o, e) {
+function I(s, e) {
   const t = [];
-  if (!o)
+  if (!s)
     return t;
-  const a = document.createTreeWalker(o, NodeFilter.SHOW_TEXT, {
+  const a = document.createTreeWalker(s, NodeFilter.SHOW_TEXT, {
     acceptNode(r) {
-      const s = r.parentElement;
-      return !s || A(s) || s.closest("[data-peek-ui]") ? NodeFilter.FILTER_REJECT : S(r.nodeValue).length >= e ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+      const o = r.parentElement;
+      return !o || A(o) || o.closest("[data-peek-ui]") ? NodeFilter.FILTER_REJECT : S(r.nodeValue).length >= e ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
     }
   });
   let i = a.nextNode();
@@ -123,38 +123,38 @@ function I(o, e) {
   }
   return t;
 }
-function n(o, e = {}, ...t) {
-  const a = document.createElement(o);
+function n(s, e = {}, ...t) {
+  const a = document.createElement(s);
   for (const [i, r] of Object.entries(e))
     r != null && (i === "class" ? a.className = r : i === "text" ? a.textContent = r : a.setAttribute(i, r));
   for (const i of t)
     i != null && a.append(i);
   return a;
 }
-function x(o) {
-  for (; o.firstChild; )
-    o.firstChild.remove();
+function x(s) {
+  for (; s.firstChild; )
+    s.firstChild.remove();
 }
-async function M(o) {
+async function M(s) {
   try {
-    return await navigator.clipboard.writeText(o), !0;
+    return await navigator.clipboard.writeText(s), !0;
   } catch {
     return !1;
   }
 }
-function N(o) {
-  if (!o)
+function N(s) {
+  if (!s)
     return "—";
-  const e = new Date(o);
+  const e = new Date(s);
   if (Number.isNaN(e.getTime()))
     return "—";
   const t = (a) => String(a).padStart(2, "0");
   return `${t(e.getDate())}-${t(e.getMonth() + 1)}-${e.getFullYear()} ${t(e.getHours())}:${t(e.getMinutes())}`;
 }
-function R(o) {
-  if (!o)
+function R(s) {
+  if (!s)
     return "";
-  const e = new Date(o);
+  const e = new Date(s);
   if (Number.isNaN(e.getTime()))
     return "";
   const t = new Intl.RelativeTimeFormat(void 0, { numeric: "auto" }), a = [
@@ -167,9 +167,9 @@ function R(o) {
     [Number.POSITIVE_INFINITY, "year"]
   ];
   let i = (e.getTime() - Date.now()) / 1e3;
-  for (const [r, s] of a) {
+  for (const [r, o] of a) {
     if (Math.abs(i) < r)
-      return t.format(Math.round(i), s);
+      return t.format(Math.round(i), o);
     i /= r;
   }
   return "";
@@ -187,7 +187,8 @@ const D = (
   --peek-media: #0f7b6c;
   --peek-media-soft: rgba(15, 123, 108, 0.10);
   --peek-unattributed: #8a8a8a;
-  --peek-warn: #b8320c;
+  --peek-active-border: #283a97;
+  --peek-stop: #b8320c;
 
   --peek-surface: #ffffff;
   --peek-surface-2: #f6f6f8;
@@ -201,7 +202,7 @@ const D = (
   --peek-pill-surface: #ffffff;
   --peek-pill-border: rgba(20, 20, 40, 0.12);
   --peek-pill-text: #1b1b1f;
-  --peek-pill-text-dim: #62626c;
+  --peek-pill-text-dim: #28395d;
   --peek-pill-hover: #f1f1f5;
 
   --peek-radius: 8px;
@@ -224,7 +225,7 @@ const D = (
     --peek-border: #3a3a45;
     --peek-text: #f2f2f5;
     --peek-text-dim: #a3a3b0;
-    --peek-owned: #7d8cf0;
+    --peek-owned: #283a97;
     --peek-block: #b98ae4;
     --peek-shared: #e5a43c;
     --peek-media: #4ec5b1;
@@ -292,9 +293,9 @@ const D = (
 
 .peek-pill[data-state="armed"],
 .peek-pill[data-state="locked"] { border-color: var(--peek-owned); }
-.peek-pill[data-state="xray"]     { border-color: var(--peek-block); }
-.peek-pill[data-state="degraded"] { border-color: var(--peek-warn); }
-.peek-pill[data-state="error"]    { border-color: var(--peek-warn); }
+.peek-pill[data-state="xray"]     { border-color: var(--peek-owned); }
+.peek-pill[data-state="degraded"] { border-color: var(--peek-active-border); }
+.peek-pill[data-state="error"]    { border-color: var(--peek-stop); }
 
 /* ------------------------------------------------ the mark */
 
@@ -318,6 +319,7 @@ const D = (
   grid-area: 1 / 1;
   width: 32px;
   height: auto;
+  transform: translate(0.8px, -1.3px); /* nudge */
   display: block;
   pointer-events: none;
   transition: opacity 160ms ease;
@@ -388,8 +390,8 @@ const D = (
 .peek-tray button:hover { background: var(--peek-pill-hover); color: var(--peek-pill-text); }
 .peek-tray button:focus-visible { outline: 2px solid var(--peek-owned); outline-offset: 1px; }
 .peek-tray button[data-action="toggle"][aria-pressed="true"] { background: var(--peek-owned-soft); color: var(--peek-owned); }
-.peek-tray button[data-action="xray"][aria-pressed="true"]   { background: var(--peek-block-soft); color: var(--peek-block); }
-.peek-tray button[data-action="stop"] { color: var(--peek-warn); }
+.peek-tray button[data-action="xray"][aria-pressed="true"]   { background: var(--peek-owned-soft); color: var(--peek-owned); }
+.peek-tray button[data-action="stop"] { color: var(--peek-stop); }
 .peek-tray button[hidden] { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -479,7 +481,7 @@ const D = (
 .peek-tag[data-tone="block"]  { background: var(--peek-block-soft); color: var(--peek-block); }
 .peek-tag[data-tone="shared"] { background: var(--peek-shared-soft); color: var(--peek-shared); }
 .peek-tag[data-tone="media"]  { background: var(--peek-media-soft); color: var(--peek-media); }
-.peek-tag[data-tone="warn"]   { background: rgba(184, 50, 12, 0.12); color: var(--peek-warn); }
+.peek-tag[data-tone="warn"]   { background: rgba(184, 50, 12, 0.12); color: var(--peek-stop); }
 .peek-tag[data-tone="quiet"]  { background: var(--peek-surface-2); color: var(--peek-text-dim); }
 
 .peek-actions {
@@ -596,7 +598,7 @@ const D = (
   background: var(--peek-owned);
 }
 
-.peek-coverage-bar[data-low="true"] i { background: var(--peek-warn); }
+.peek-coverage-bar[data-low="true"] i { background: var(--peek-stop); }
 
 .peek-coverage-label {
   display: flex;
@@ -673,7 +675,7 @@ const D = (
   white-space: nowrap;
 }
 
-.peek-row-note[data-tone="warn"] { color: var(--peek-warn); font-weight: 600; }
+.peek-row-note[data-tone="warn"] { color: var(--peek-stop); font-weight: 600; }
 
 .peek-panel-foot {
   padding: 8px 13px;
@@ -687,7 +689,7 @@ const D = (
   padding: 8px 10px;
   border-radius: 6px;
   background: rgba(184, 50, 12, 0.10);
-  color: var(--peek-warn);
+  color: var(--peek-stop);
   font-size: 11.5px;
   font-weight: 600;
 }
@@ -700,8 +702,8 @@ const D = (
 }
 `
 ), f = 0.6, B = 4;
-function v(o) {
-  return new URL(o, import.meta.url).href;
+function v(s) {
+  return new URL(s, import.meta.url).href;
 }
 const w = {
   idle: v("icons/PeekIconUnactive.png"),
@@ -718,25 +720,25 @@ const w = {
   Media: "Media"
 };
 class z {
-  #k;
-  #I;
+  #u;
+  #$;
   #n;
   #i = "dormant";
   #r = null;
   #e = null;
-  #f;
+  #k;
   #t;
-  #l;
+  #f;
   #w;
-  #M;
+  #I;
   #y;
   #E;
   #P;
   #S;
   /** The tray only exists once asked for: at rest the pill is the icon and nothing else. */
-  #T = !1;
+  #M = !1;
   /** Set while a press on the pill turned into a drag, so the release does not also toggle it. */
-  #A = !1;
+  #T = !1;
   /**
    * Inspect and X-ray are independent switches the user can combine, even though X-ray always needs
    * the same hover engine Inspect turns on. These track which of the two the user actually pressed,
@@ -744,23 +746,23 @@ class z {
    * two buttons never light up together just because the engine happens to be running for one of
    * them.
    */
-  #c = !1;
+  #l = !1;
   #g = !1;
-  #h = null;
+  #c = null;
   #b = null;
   #a = null;
-  #o = !1;
-  #s = 0;
+  #s = !1;
+  #o = 0;
   #d = /* @__PURE__ */ new Set();
-  #L = !1;
+  #A = !1;
   /** Usage counts are fetched lazily per node — the manifest should not pay for them. */
   #v = /* @__PURE__ */ new Map();
   constructor(e) {
-    this.#n = e, this.#I = n("div", { "data-peek-ui": "root" }), this.#k = this.#I.attachShadow({ mode: "open" }), this.#k.append(n("style", { text: D })), document.body.append(this.#I), this.#K(), this.#W();
+    this.#n = e, this.#$ = n("div", { "data-peek-ui": "root" }), this.#u = this.#$.attachShadow({ mode: "open" }), this.#u.append(n("style", { text: D })), document.body.append(this.#$), this.#K(), this.#H();
   }
   // ------------------------------------------------------------------ chrome
   #K() {
-    this.#f = n("div", { class: "peek-layer" }), this.#l = n(
+    this.#k = n("div", { class: "peek-layer" }), this.#f = n(
       "button",
       {
         type: "button",
@@ -781,14 +783,14 @@ class z {
       "data-action": "xray",
       "aria-pressed": "false",
       text: "X-ray"
-    }), this.#S = n("button", { type: "button", "data-action": "stop", hidden: "", text: "Stop" }), this.#M = n(
+    }), this.#S = n("button", { type: "button", "data-action": "stop", hidden: "", text: "Stop" }), this.#I = n(
       "div",
       { class: "peek-tray-inner" },
       this.#y,
       this.#E,
       this.#P,
       this.#S
-    ), this.#w = n("div", { class: "peek-tray", "aria-hidden": "true" }, this.#M), this.#t = n(
+    ), this.#w = n("div", { class: "peek-tray", "aria-hidden": "true" }, this.#I), this.#t = n(
       "div",
       {
         class: "peek-pill",
@@ -799,21 +801,21 @@ class z {
         role: "group",
         "aria-label": "Peek content inspector"
       },
-      this.#l,
+      this.#f,
       this.#w
-    ), this.#l.addEventListener("click", (e) => {
-      if (e.stopPropagation(), this.#A) {
-        this.#A = !1;
+    ), this.#f.addEventListener("click", (e) => {
+      if (e.stopPropagation(), this.#T) {
+        this.#T = !1;
         return;
       }
-      this.#N(!this.#T);
+      this.#B(!this.#M);
     }), this.#E.addEventListener("click", (e) => {
       e.stopPropagation(), this.toggle();
     }), this.#P.addEventListener("click", (e) => {
       e.stopPropagation(), this.toggleXray();
     }), this.#S.addEventListener("click", (e) => {
       e.stopPropagation(), this.disarm();
-    }), this.#_(this.#t), this.#k.append(this.#f, this.#t);
+    }), this.#_(this.#t), this.#u.append(this.#k, this.#t);
   }
   // ------------------------------------------------------------------ tray
   /**
@@ -821,11 +823,11 @@ class z {
    * measured from the laid-out content rather than guessed, so a longer status line still unfurls
    * to exactly the width it needs.
    */
-  #N(e) {
-    this.#T = e, this.#t.dataset.open = String(e), this.#l.setAttribute("aria-expanded", String(e)), this.#w.setAttribute("aria-hidden", String(!e)), this.#U();
+  #B(e) {
+    this.#M = e, this.#t.dataset.open = String(e), this.#f.setAttribute("aria-expanded", String(e)), this.#w.setAttribute("aria-hidden", String(!e)), this.#U();
   }
   #U() {
-    this.#w.style.width = this.#T ? `${this.#M.offsetWidth}px` : "0px";
+    this.#w.style.width = this.#M ? `${this.#I.offsetWidth}px` : "0px";
   }
   /**
    * Keep the pill anchored to whichever edge it was dropped nearest, and unfurl the tray away from
@@ -843,27 +845,23 @@ class z {
    * the pointer has travelled past `DRAG_SLOP`. Below that it stays a click and the tray toggles.
    */
   #_(e) {
-    let t = !1, a = !1, i = 0, r = 0, s = 0, d = 0;
+    let t = !1, a = !1, i = 0, r = 0, o = 0, d = 0;
     e.addEventListener("pointerdown", (p) => {
       const h = p.target;
       if (h.closest?.(".peek-tray"))
         return;
-      t = !0, a = !1, this.#A = !1, i = p.clientX, r = p.clientY;
+      t = !0, a = !1, this.#T = !1, i = p.clientX, r = p.clientY;
       const c = e.getBoundingClientRect();
-      s = p.clientX - c.left, d = p.clientY - c.top, h.setPointerCapture(p.pointerId);
+      o = p.clientX - c.left, d = p.clientY - c.top, h.setPointerCapture(p.pointerId);
     }), e.addEventListener("pointermove", (p) => {
       if (!t)
         return;
       if (!a) {
         if (Math.hypot(p.clientX - i, p.clientY - r) < B)
           return;
-        if (a = !0, this.#A = !0, e.dataset.dragging = "true", this.#T) {
-          this.#N(!1);
-          const u = e.getBoundingClientRect();
-          s = Math.min(p.clientX - u.left, this.#l.offsetWidth);
-        }
+        a = !0, this.#T = !0, e.dataset.dragging = "true";
       }
-      const h = Math.min(Math.max(0, p.clientX - s), window.innerWidth - e.offsetWidth), c = Math.min(Math.max(0, p.clientY - d), window.innerHeight - e.offsetHeight);
+      const h = Math.min(Math.max(0, p.clientX - o), window.innerWidth - e.offsetWidth), c = Math.min(Math.max(0, p.clientY - d), window.innerHeight - e.offsetHeight);
       e.style.left = `${h}px`, e.style.top = `${c}px`, e.style.right = "auto", e.style.bottom = "auto";
     });
     const l = (p) => {
@@ -871,11 +869,11 @@ class z {
     };
     e.addEventListener("pointerup", l), e.addEventListener("pointercancel", l);
   }
-  #W() {
+  #H() {
     document.addEventListener("keydown", (a) => this.#G(a), !0), document.addEventListener("mousemove", (a) => this.#j(a), { passive: !0 }), document.addEventListener("click", (a) => this.#q(a), !0);
     let e = 0;
     const t = () => {
-      cancelAnimationFrame(e), e = requestAnimationFrame(() => this.#Y());
+      cancelAnimationFrame(e), e = requestAnimationFrame(() => this.#X());
     };
     window.addEventListener("resize", t, { passive: !0 }), window.addEventListener("scroll", t, { passive: !0, capture: !0 });
   }
@@ -894,42 +892,42 @@ class z {
       degraded: "Partial coverage",
       error: "Peek unavailable"
     }, a = this.#m;
-    this.#t.dataset.active = String(a), this.#l.title = t[e], this.#l.setAttribute("aria-label", `Peek content inspector — ${t[e]}`), this.#y.textContent = t[e], this.#y.hidden = e === "dormant" || e === "armed" || e === "xray" || e === "degraded", this.#C(), this.#S.hidden = !a, e === "loading" || e === "degraded" || e === "error" ? this.#N(!0) : this.#U();
+    this.#t.dataset.active = String(a), this.#f.title = t[e], this.#f.setAttribute("aria-label", `Peek content inspector — ${t[e]}`), this.#y.textContent = t[e], this.#y.hidden = e === "dormant" || e === "armed" || e === "xray" || e === "degraded", this.#L(), this.#S.hidden = !a, e === "loading" || e === "degraded" || e === "error" ? this.#B(!0) : this.#U();
   }
   /** Reflects Inspect and X-ray's own on/off state onto their buttons — independent of each other. */
-  #C() {
-    this.#E.setAttribute("aria-pressed", String(this.#c)), this.#P.setAttribute("aria-pressed", String(this.#g));
+  #L() {
+    this.#E.setAttribute("aria-pressed", String(this.#l)), this.#P.setAttribute("aria-pressed", String(this.#g));
   }
   async toggle() {
-    if (this.#c) {
-      this.#c = !1, this.#g ? this.#C() : this.disarm();
+    if (this.#l) {
+      this.#l = !1, this.#g ? this.#L() : this.disarm();
       return;
     }
     if (this.#m) {
-      this.#c = !0, this.#C();
+      this.#l = !0, this.#L();
       return;
     }
-    await this.arm(), this.#i !== "error" && (this.#c = !0, this.#C());
+    await this.arm(), this.#i !== "error" && (this.#l = !0, this.#L());
   }
   async arm() {
-    if (!this.#r && (this.#p("loading"), !await this.#H())) {
+    if (!this.#r && (this.#p("loading"), !await this.#W())) {
       this.#p("error"), this.#de("Peek could not read this page. It may not be an Umbraco-routed document.");
       return;
     }
     this.#e = L(this.#r), this.#p(this.#e.coverage < f ? "degraded" : "armed"), this.#x();
   }
   disarm() {
-    this.#o = !1, this.#a = null, this.#c = !1, this.#g = !1, this.#p("dormant"), x(this.#f), this.#$(), this.#D();
+    this.#s = !1, this.#a = null, this.#l = !1, this.#g = !1, this.#p("dormant"), x(this.#k), this.#C(), this.#R();
   }
   async toggleXray() {
     if (this.#g) {
-      this.#g = !1, this.#D(), this.#c ? this.#p(this.#e && this.#e.coverage < f ? "degraded" : "armed") : this.disarm(), this.#x();
+      this.#g = !1, this.#R(), this.#l ? this.#p(this.#e && this.#e.coverage < f ? "degraded" : "armed") : this.disarm(), this.#x();
       return;
     }
-    !this.#m && (await this.arm(), this.#i === "error") || (this.#g = !0, this.#p("xray"), this.#x(), this.#B());
+    !this.#m && (await this.arm(), this.#i === "error") || (this.#g = !0, this.#p("xray"), this.#x(), this.#D());
   }
   // ------------------------------------------------------------------ data
-  async #H() {
+  async #W() {
     if (!this.#n.pageKey)
       return !1;
     const e = new URL(this.#n.manifestUrl, window.location.origin);
@@ -956,22 +954,22 @@ class z {
     } catch {
       this.#v.set(e, "error");
     }
-    this.#a && this.#u(this.#a);
+    this.#a && this.#h(this.#a);
   }
-  #R(e) {
+  #N(e) {
     return this.#r?.nodes.find((t) => t.key === e);
   }
   // ------------------------------------------------------------------ highlights
   #x() {
-    if (x(this.#f), !!this.#e) {
+    if (x(this.#k), !!this.#e) {
       for (const e of this.#e.regions) {
         const t = e.entries[0];
-        this.#d.has(t.sourceKind) || this.#f.append(this.#X(e));
+        this.#d.has(t.sourceKind) || this.#k.append(this.#Y(e));
       }
-      if (this.#i === "xray" && this.#L)
+      if (this.#i === "xray" && this.#A)
         for (const e of this.#e.unattributed) {
           const t = e.getBoundingClientRect();
-          t.width === 0 && t.height === 0 || this.#f.append(
+          t.width === 0 && t.height === 0 || this.#k.append(
             n("div", {
               class: "peek-highlight",
               "data-kind": "Unattributed",
@@ -981,7 +979,7 @@ class z {
         }
     }
   }
-  #X(e) {
+  #Y(e) {
     const t = e.element.getBoundingClientRect(), a = e.entries[0], i = n("div", {
       class: "peek-highlight",
       "data-kind": a.sourceKind,
@@ -990,24 +988,24 @@ class z {
     });
     return e.entries.length > 1 && i.append(n("span", { class: "peek-ambiguous-badge", text: "?", title: `${e.entries.length} possible sources` })), i;
   }
-  #Y() {
+  #X() {
     this.#m && (this.#x(), this.#a && this.#z(this.#a));
   }
   // ------------------------------------------------------------------ interaction
   #j(e) {
-    if (this.#i !== "armed" && this.#i !== "degraded" && this.#i !== "xray" || this.#o || !this.#e)
+    if (this.#i !== "armed" && this.#i !== "degraded" && this.#i !== "xray" || this.#s || !this.#e)
       return;
     const t = this.#O(e.clientX, e.clientY);
-    t !== this.#a && (this.#a = t, this.#s = 0, t ? this.#u(t) : this.#$());
+    t !== this.#a && (this.#a = t, this.#o = 0, t ? this.#h(t) : this.#C());
   }
   #q(e) {
     if (!this.#m)
       return;
     const t = e.composedPath();
-    if (t.includes(this.#t) || this.#h && t.includes(this.#h) || this.#b && t.includes(this.#b))
+    if (t.includes(this.#t) || this.#c && t.includes(this.#c) || this.#b && t.includes(this.#b))
       return;
     const a = this.#O(e.clientX, e.clientY);
-    a && (e.preventDefault(), e.stopPropagation(), this.#o = !0, this.#a = a, this.#s = 0, this.#p("locked"), this.#u(a));
+    a && (e.preventDefault(), e.stopPropagation(), this.#s = !0, this.#a = a, this.#o = 0, this.#p("locked"), this.#h(a));
   }
   #G(e) {
     if (e.ctrlKey && e.shiftKey && e.code === "KeyU") {
@@ -1017,10 +1015,10 @@ class z {
     if (!this.#m)
       return;
     if (e.key === "Escape") {
-      e.preventDefault(), this.#o ? (this.#o = !1, this.#p(this.#b ? "xray" : "armed"), this.#$()) : this.disarm();
+      e.preventDefault(), this.#s ? (this.#s = !1, this.#p(this.#b ? "xray" : "armed"), this.#C()) : this.disarm();
       return;
     }
-    if (!this.#o || !this.#a)
+    if (!this.#s || !this.#a)
       return;
     const t = this.#a.entries;
     switch (e.key) {
@@ -1030,7 +1028,7 @@ class z {
           return;
         e.preventDefault();
         const a = e.key === "ArrowDown" ? 1 : -1;
-        this.#s = (this.#s + a + t.length) % t.length, this.#u(this.#a);
+        this.#o = (this.#o + a + t.length) % t.length, this.#h(this.#a);
         return;
       }
       case "ArrowLeft":
@@ -1040,7 +1038,7 @@ class z {
       }
       case "Enter": {
         e.preventDefault();
-        const a = t[this.#s]?.editUrl;
+        const a = t[this.#o]?.editUrl;
         a && window.open(a, "_blank", "noopener");
         return;
       }
@@ -1054,7 +1052,7 @@ class z {
     if (a < 0)
       return;
     const i = t[(a + e + t.length) % t.length];
-    this.#a = i, this.#s = 0, i.element.scrollIntoView({ block: "center", behavior: "smooth" }), this.#u(i);
+    this.#a = i, this.#o = 0, i.element.scrollIntoView({ block: "center", behavior: "smooth" }), this.#h(i);
   }
   #O(e, t) {
     if (!this.#e)
@@ -1063,24 +1061,24 @@ class z {
     for (const r of this.#e.regions) {
       if (this.#d.has(r.entries[0].sourceKind))
         continue;
-      const s = r.element.getBoundingClientRect();
-      if (e < s.left || e > s.right || t < s.top || t > s.bottom)
+      const o = r.element.getBoundingClientRect();
+      if (e < o.left || e > o.right || t < o.top || t > o.bottom)
         continue;
-      const d = s.width * s.height;
+      const d = o.width * o.height;
       d < i && (a = r, i = d);
     }
     return a;
   }
   // ------------------------------------------------------------------ card
-  #$() {
-    this.#h?.remove(), this.#h = null;
+  #C() {
+    this.#c?.remove(), this.#c = null;
   }
-  #u(e) {
-    this.#$();
-    const t = e.entries[this.#s] ?? e.entries[0], a = this.#R(t.nodeKey), i = n("div", {
+  #h(e) {
+    this.#C();
+    const t = e.entries[this.#o] ?? e.entries[0], a = this.#N(t.nodeKey), i = n("div", {
       class: "peek-card",
       "data-kind": t.sourceKind,
-      "data-pinned": String(this.#o),
+      "data-pinned": String(this.#s),
       "data-peek-ui": "card"
     });
     i.append(n("div", { class: "peek-card-accent" }));
@@ -1091,11 +1089,11 @@ class z {
         "data-empty": String(!t.valuePreview),
         text: t.valuePreview || "(empty)"
       })
-    ), r.append(this.#te(t, a)), r.append(this.#ae(t, a)), this.#o) {
-      const s = n("div", { class: "peek-keyhint" });
-      s.innerHTML = "<kbd>←</kbd><kbd>→</kbd> next region · <kbd>↑</kbd><kbd>↓</kbd> candidates · <kbd>Enter</kbd> open · <kbd>Esc</kbd> close", r.append(s);
+    ), r.append(this.#te(t, a)), r.append(this.#ae(t, a)), this.#s) {
+      const o = n("div", { class: "peek-keyhint" });
+      o.innerHTML = "<kbd>←</kbd><kbd>→</kbd> next region · <kbd>↑</kbd><kbd>↓</kbd> candidates · <kbd>Enter</kbd> open · <kbd>Esc</kbd> close", r.append(o);
     }
-    i.append(r), this.#h = i, this.#k.append(i), this.#z(e), t.sourceKind === "Shared" && a && this.#V(a.key);
+    i.append(r), this.#c = i, this.#u.append(i), this.#z(e), t.sourceKind === "Shared" && a && this.#V(a.key);
   }
   #Q(e, t) {
     const a = n("div", { class: "peek-tags" });
@@ -1134,10 +1132,10 @@ class z {
   }
   #Z(e, t) {
     const a = n("div", { class: "peek-breadcrumb" }), i = [this.#r?.page?.name ?? t?.name ?? "Page", ...e.breadcrumb.map((r) => r.label)];
-    return i.forEach((r, s) => {
-      s > 0 && a.append(n("span", { class: "peek-crumb-sep", text: "›" })), a.append(
+    return i.forEach((r, o) => {
+      o > 0 && a.append(n("span", { class: "peek-crumb-sep", text: "›" })), a.append(
         n("span", {
-          class: s === i.length - 1 ? "peek-crumb-last" : "",
+          class: o === i.length - 1 ? "peek-crumb-last" : "",
           text: r
         })
       );
@@ -1146,13 +1144,13 @@ class z {
   #ee(e) {
     const t = n("ul", { class: "peek-candidates", role: "listbox" });
     e.entries.forEach((i, r) => {
-      const s = this.#R(i.nodeKey), d = n("li", {
+      const o = this.#N(i.nodeKey), d = n("li", {
         role: "option",
-        "aria-selected": String(r === this.#s),
-        text: `${s?.contentTypeAlias ?? "?"}.${i.propertyAlias}`
+        "aria-selected": String(r === this.#o),
+        text: `${o?.contentTypeAlias ?? "?"}.${i.propertyAlias}`
       });
       d.addEventListener("click", (l) => {
-        l.stopPropagation(), this.#s = r, this.#u(e);
+        l.stopPropagation(), this.#o = r, this.#h(e);
       }), t.append(d);
     });
     const a = n("div", {
@@ -1171,8 +1169,8 @@ class z {
       ["Edited", t?.updateDate ? `${N(t.updateDate)} (${R(t.updateDate)})` : "—"],
       ["By", t?.lastEditedBy ?? "—"]
     ];
-    for (const [r, s] of i)
-      a.append(n("dt", { text: r }), n("dd", { text: s }));
+    for (const [r, o] of i)
+      a.append(n("dt", { text: r }), n("dd", { text: o }));
     return a;
   }
   #ae(e, t) {
@@ -1192,13 +1190,13 @@ class z {
       ["Razor", i],
       ["Bug report", this.#ie(e, t)]
     ];
-    for (const [s, d] of r) {
-      const l = n("button", { type: "button", text: s });
+    for (const [o, d] of r) {
+      const l = n("button", { type: "button", text: o });
       l.addEventListener("click", async (p) => {
         p.stopPropagation();
         const h = await M(d);
         l.textContent = h ? "Copied" : "Copy failed", setTimeout(() => {
-          l.textContent = s;
+          l.textContent = o;
         }, 1200);
       }), a.append(l);
     }
@@ -1217,29 +1215,29 @@ class z {
 `);
   }
   #z(e) {
-    if (!this.#h)
+    if (!this.#c)
       return;
-    const t = e.element.getBoundingClientRect(), a = this.#h, i = a.offsetWidth || 340, r = a.offsetHeight || 220;
-    let s = t.left, d = t.bottom + 8;
-    s + i > window.innerWidth - 12 && (s = window.innerWidth - i - 12), d + r > window.innerHeight - 12 && (d = Math.max(12, t.top - r - 8)), a.style.left = `${Math.max(12, s)}px`, a.style.top = `${d}px`;
+    const t = e.element.getBoundingClientRect(), a = this.#c, i = a.offsetWidth || 340, r = a.offsetHeight || 220;
+    let o = t.left, d = t.bottom + 8;
+    o + i > window.innerWidth - 12 && (o = window.innerWidth - i - 12), d + r > window.innerHeight - 12 && (d = Math.max(12, t.top - r - 8)), a.style.left = `${Math.max(12, o)}px`, a.style.top = `${d}px`;
   }
   // ------------------------------------------------------------------ x-ray panel
-  #D() {
+  #R() {
     this.#b?.remove(), this.#b = null;
   }
-  #B() {
-    if (this.#D(), !this.#r || !this.#e)
+  #D() {
+    if (this.#R(), !this.#r || !this.#e)
       return;
     const e = n("div", { class: "peek-panel", "data-peek-ui": "panel" });
     e.append(this.#re());
     for (const t of this.#r.warnings)
       e.append(n("div", { class: "peek-notice", text: t }));
-    e.append(this.#se()), e.append(
+    e.append(this.#oe()), e.append(
       n("div", {
         class: "peek-panel-foot",
         text: `${this.#r.entries.length} values considered · built in ${this.#r.buildDurationMs} ms`
       })
-    ), this.#b = e, this.#k.append(e);
+    ), this.#b = e, this.#u.append(e);
   }
   #re() {
     const e = this.#r, t = this.#e, a = Math.round(t.coverage * 100), i = n("div", { class: "peek-panel-head" });
@@ -1273,7 +1271,7 @@ class z {
       ["Shared", "shared", "Shared"],
       ["Media", "media", "Media"]
     ];
-    for (const [i, r, s] of t) {
+    for (const [i, r, o] of t) {
       const d = n(
         "button",
         {
@@ -1283,10 +1281,10 @@ class z {
           "aria-pressed": String(!this.#d.has(i))
         },
         n("i", {}),
-        document.createTextNode(s)
+        document.createTextNode(o)
       );
       d.addEventListener("click", () => {
-        this.#d.has(i) ? this.#d.delete(i) : this.#d.add(i), this.#x(), this.#B();
+        this.#d.has(i) ? this.#d.delete(i) : this.#d.add(i), this.#x(), this.#D();
       }), e.append(d);
     }
     const a = n(
@@ -1295,32 +1293,32 @@ class z {
         class: "peek-chip",
         type: "button",
         "data-tone": "unattributed",
-        "aria-pressed": String(this.#L),
+        "aria-pressed": String(this.#A),
         title: "Text Peek could not trace back to a content property."
       },
       n("i", {}),
       document.createTextNode("Unattributed")
     );
     return a.addEventListener("click", () => {
-      this.#L = !this.#L, this.#x(), this.#B();
+      this.#A = !this.#A, this.#x(), this.#D();
     }), e.append(a), e;
   }
-  #se() {
+  #oe() {
     const e = n("div", { class: "peek-panel-list" }), t = this.#r, a = this.#e, i = t.entries.filter(
-      (s) => !this.#d.has(s.sourceKind) && s.state !== "Empty"
+      (o) => !this.#d.has(o.sourceKind) && o.state !== "Empty"
     );
     if (i.length === 0)
       return e.append(n("div", { class: "peek-empty", text: "Nothing to show with these filters." })), e;
-    const r = [...i].sort((s, d) => {
+    const r = [...i].sort((o, d) => {
       const l = (p) => a.matchedEntryIds.has(p.id) ? 0 : p.state === "Unmatchable" ? 2 : 1;
-      return l(s) - l(d);
+      return l(o) - l(d);
     });
-    for (const s of r)
-      e.append(this.#oe(s, a.matchedEntryIds.has(s.id)));
+    for (const o of r)
+      e.append(this.#se(o, a.matchedEntryIds.has(o.id)));
     return e;
   }
-  #oe(e, t) {
-    const a = this.#R(e.nodeKey), i = t ? e.valuePreview ?? "" : e.state === "Unmatchable" ? `has a value Peek can't search for (${e.unmatchable})` : "read, not rendered", r = n(
+  #se(e, t) {
+    const a = this.#N(e.nodeKey), i = t ? e.valuePreview ?? "" : e.state === "Unmatchable" ? `has a value Peek can't search for (${e.unmatchable})` : "read, not rendered", r = n(
       "button",
       {
         class: "peek-row",
@@ -1341,27 +1339,27 @@ class z {
       )
     );
     return r.addEventListener("click", () => {
-      const s = this.#e?.regions.find(
+      const o = this.#e?.regions.find(
         (d) => d.entries.some((l) => l.id === e.id)
       );
-      s ? (this.#o = !0, this.#a = s, this.#s = s.entries.findIndex((d) => d.id === e.id), s.element.scrollIntoView({ block: "center", behavior: "smooth" }), this.#u(s)) : e.editUrl && window.open(e.editUrl, "_blank", "noopener");
+      o ? (this.#s = !0, this.#a = o, this.#o = o.entries.findIndex((d) => d.id === e.id), o.element.scrollIntoView({ block: "center", behavior: "smooth" }), this.#h(o)) : e.editUrl && window.open(e.editUrl, "_blank", "noopener");
     }), r;
   }
   #de(e) {
     const t = n("div", { class: "peek-notice", "data-peek-ui": "notice", text: e });
-    t.style.position = "absolute", t.style.right = "20px", t.style.bottom = "74px", t.style.maxWidth = "320px", t.style.pointerEvents = "auto", this.#k.append(t), setTimeout(() => t.remove(), 6e3);
+    t.style.position = "absolute", t.style.right = "20px", t.style.bottom = "74px", t.style.maxWidth = "320px", t.style.pointerEvents = "auto", this.#u.append(t), setTimeout(() => t.remove(), 6e3);
   }
 }
-function y(o) {
-  return `left:${o.left}px;top:${o.top}px;width:${o.width}px;height:${o.height}px`;
+function y(s) {
+  return `left:${s.left}px;top:${s.top}px;width:${s.width}px;height:${s.height}px`;
 }
 const K = "peek-bootstrap", E = 1;
 function F() {
-  const o = document.getElementById(K);
-  if (!o?.textContent)
+  const s = document.getElementById(K);
+  if (!s?.textContent)
     return null;
   try {
-    const e = JSON.parse(o.textContent);
+    const e = JSON.parse(s.textContent);
     return e.version !== E ? (console.warn(
       `[Peek] bootstrap version ${e.version} is not supported by this overlay (expected ${E}). Hard-refresh to pick up the current build.`
     ), null) : e;
@@ -1370,10 +1368,10 @@ function F() {
   }
 }
 function P() {
-  const o = F();
-  if (!o)
+  const s = F();
+  if (!s)
     return;
-  const e = new z(o);
+  const e = new z(s);
   new URLSearchParams(window.location.search).get("peek") !== null && e.arm();
 }
 document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", P, { once: !0 }) : P();
