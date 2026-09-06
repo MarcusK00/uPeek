@@ -15,6 +15,27 @@ type PeekState = 'dormant' | 'loading' | 'armed' | 'locked' | 'xray' | 'degraded
 /** Below this, the overlay says so rather than pretending the page is mostly understood. */
 const LOW_COVERAGE = 0.6;
 
+/** How far a pointer may travel before a press on the pill counts as a drag, not a click. */
+const DRAG_SLOP = 4;
+
+/**
+ * Resolve a file shipped alongside the bundle in `wwwroot/App_Plugins/Peek`.
+ *
+ * The argument is a variable on purpose: Vite rewrites `new URL('./literal', import.meta.url)` into
+ * a build-time asset reference, which would look for the file next to the TypeScript source instead
+ * of next to the bundle. Going through a parameter keeps the resolution where it belongs — at run
+ * time, relative to the loaded script — so the overlay still finds its icons on a site hosted in a
+ * virtual directory.
+ */
+function pluginAsset(file: string): string {
+  return new URL(file, import.meta.url).href;
+}
+
+const ICONS = {
+  idle: pluginAsset('icons/PeekIconUnactive.png'),
+  active: pluginAsset('icons/PeekIconActive.png'),
+};
+
 const KIND_TONE: Record<string, string> = {
   OwnedProperty: 'owned',
   Block: 'block',
@@ -40,10 +61,28 @@ export class PeekOverlay {
 
   #layer!: HTMLDivElement;
   #pill!: HTMLDivElement;
-  #pillLabel!: HTMLSpanElement;
+  #badge!: HTMLButtonElement;
+  #tray!: HTMLDivElement;
+  #trayInner!: HTMLDivElement;
+  #statusLabel!: HTMLSpanElement;
   #inspectButton!: HTMLButtonElement;
   #xrayButton!: HTMLButtonElement;
   #stopButton!: HTMLButtonElement;
+
+  /** The tray only exists once asked for: at rest the pill is the icon and nothing else. */
+  #trayOpen = false;
+  /** Set while a press on the pill turned into a drag, so the release does not also toggle it. */
+  #dragMoved = false;
+
+  /**
+   * Inspect and X-ray are independent switches the user can combine, even though X-ray always needs
+   * the same hover engine Inspect turns on. These track which of the two the user actually pressed,
+   * so turning one off only disarms the engine when the other isn't still asking for it — and the
+   * two buttons never light up together just because the engine happens to be running for one of
+   * them.
+   */
+  #inspectOn = false;
+  #xrayOn = false;
   #card: HTMLDivElement | null = null;
   #panel: HTMLDivElement | null = null;
 
@@ -74,9 +113,29 @@ export class PeekOverlay {
   #buildChrome(): void {
     this.#layer = el('div', { class: 'peek-layer' });
 
-    this.#pillLabel = el('span', { text: 'Peek' });
+    // Both marks live in the DOM and cross-fade. Swapping a single src would flash on the first
+    // toggle, which is exactly the moment the user is watching the thing they just clicked.
+    this.#badge = el(
+      'button',
+      {
+        type: 'button',
+        class: 'peek-badge',
+        'aria-expanded': 'false',
+        'aria-label': 'Peek content inspector',
+        title: 'Peek',
+      },
+      el('img', { class: 'peek-mark', 'data-variant': 'idle', src: ICONS.idle, alt: '', draggable: 'false' }),
+      el('img', { class: 'peek-mark', 'data-variant': 'active', src: ICONS.active, alt: '', draggable: 'false' }),
+    );
 
-    this.#inspectButton = el('button', { type: 'button', 'data-action': 'toggle', text: 'Inspect' });
+    this.#statusLabel = el('span', { class: 'peek-status', hidden: '' });
+
+    this.#inspectButton = el('button', {
+      type: 'button',
+      'data-action': 'toggle',
+      'aria-pressed': 'false',
+      text: 'Inspect',
+    });
     this.#xrayButton = el('button', {
       type: 'button',
       'data-action': 'xray',
@@ -85,15 +144,43 @@ export class PeekOverlay {
     });
     this.#stopButton = el('button', { type: 'button', 'data-action': 'stop', hidden: '', text: 'Stop' });
 
-    this.#pill = el(
+    this.#trayInner = el(
       'div',
-      { class: 'peek-pill', 'data-state': 'dormant', role: 'group', 'aria-label': 'Peek content inspector' },
-      el('span', { class: 'peek-dot' }),
-      this.#pillLabel,
+      { class: 'peek-tray-inner' },
+      this.#statusLabel,
       this.#inspectButton,
       this.#xrayButton,
       this.#stopButton,
     );
+
+    this.#tray = el('div', { class: 'peek-tray', 'aria-hidden': 'true' }, this.#trayInner);
+
+    this.#pill = el(
+      'div',
+      {
+        class: 'peek-pill',
+        'data-state': 'dormant',
+        'data-active': 'false',
+        'data-open': 'false',
+        'data-side': 'right',
+        role: 'group',
+        'aria-label': 'Peek content inspector',
+      },
+      this.#badge,
+      this.#tray,
+    );
+
+    this.#badge.addEventListener('click', (event) => {
+      event.stopPropagation();
+
+      // The press that just ended was a drag across the page, not a tap on the icon.
+      if (this.#dragMoved) {
+        this.#dragMoved = false;
+        return;
+      }
+
+      this.#setTrayOpen(!this.#trayOpen);
+    });
 
     this.#inspectButton.addEventListener('click', (event) => {
       event.stopPropagation();
@@ -115,28 +202,111 @@ export class PeekOverlay {
     this.#root.append(this.#layer, this.#pill);
   }
 
-  /** The pill will end up on top of somebody's chat widget. It has to be movable. */
+  // ------------------------------------------------------------------ tray
+
+  /**
+   * The tray animates on an explicit pixel width because `auto` is not an animatable value. It is
+   * measured from the laid-out content rather than guessed, so a longer status line still unfurls
+   * to exactly the width it needs.
+   */
+  #setTrayOpen(open: boolean): void {
+    this.#trayOpen = open;
+    this.#pill.dataset.open = String(open);
+    this.#badge.setAttribute('aria-expanded', String(open));
+    this.#tray.setAttribute('aria-hidden', String(!open));
+    this.#syncTrayWidth();
+  }
+
+  #syncTrayWidth(): void {
+    this.#tray.style.width = this.#trayOpen ? `${this.#trayInner.offsetWidth}px` : '0px';
+  }
+
+  /**
+   * Keep the pill anchored to whichever edge it was dropped nearest, and unfurl the tray away from
+   * that edge. Anchoring by `right` on the right-hand side is what keeps the icon still while the
+   * tray grows: anchored by `left`, opening the tray would push the icon sideways instead.
+   */
+  #anchorPill(): void {
+    const rect = this.#pill.getBoundingClientRect();
+    const onRight = rect.left + rect.width / 2 > window.innerWidth / 2;
+
+    this.#pill.dataset.side = onRight ? 'right' : 'left';
+
+    if (onRight) {
+      this.#pill.style.right = `${Math.round(window.innerWidth - rect.right)}px`;
+      this.#pill.style.left = 'auto';
+    } else {
+      this.#pill.style.left = `${Math.round(rect.left)}px`;
+      this.#pill.style.right = 'auto';
+    }
+
+    this.#pill.style.top = `${Math.round(rect.top)}px`;
+    this.#pill.style.bottom = 'auto';
+  }
+
+  /**
+   * The pill will end up on top of somebody's chat widget. It has to be movable.
+   *
+   * The icon is now both the drag handle and the tray toggle, so a press only becomes a drag once
+   * the pointer has travelled past `DRAG_SLOP`. Below that it stays a click and the tray toggles.
+   */
   #makeDraggable(pill: HTMLElement): void {
+    let pressed = false;
     let dragging = false;
+    let startX = 0;
+    let startY = 0;
     let offsetX = 0;
     let offsetY = 0;
 
     pill.addEventListener('pointerdown', (event) => {
-      if ((event.target as HTMLElement).tagName === 'BUTTON') {
+      const target = event.target as HTMLElement;
+
+      // Tray buttons are targets in their own right; a press there is never a drag.
+      if (target.closest?.('.peek-tray')) {
         return;
       }
 
-      dragging = true;
+      pressed = true;
+      dragging = false;
+      this.#dragMoved = false;
+      startX = event.clientX;
+      startY = event.clientY;
+
       const rect = pill.getBoundingClientRect();
       offsetX = event.clientX - rect.left;
       offsetY = event.clientY - rect.top;
-      pill.setPointerCapture(event.pointerId);
-      pill.dataset.dragging = 'true';
+
+      // Captured on the pressed element itself (the badge) rather than the pill. Capturing on an
+      // ancestor would redirect the compatibility click that follows pointerup to that ancestor
+      // instead of the badge, so a plain click would never reach the badge's own listener.
+      // Capturing here still keeps every pointermove reaching this handler: those events bubble
+      // from the badge up through the pill regardless of where the cursor strays mid-drag, which a
+      // 44px hit target could not otherwise guarantee at real mouse speeds.
+      target.setPointerCapture(event.pointerId);
     });
 
     pill.addEventListener('pointermove', (event) => {
-      if (!dragging) {
+      if (!pressed) {
         return;
+      }
+
+      if (!dragging) {
+        if (Math.hypot(event.clientX - startX, event.clientY - startY) < DRAG_SLOP) {
+          return;
+        }
+
+        dragging = true;
+        this.#dragMoved = true;
+        pill.dataset.dragging = 'true';
+
+        // Collapse first: the maths below, and #anchorPill afterwards, both assume the pill is no
+        // wider than its icon. Re-measure the grab offset against the collapsed box, otherwise a
+        // pill grabbed by its far edge jumps under the cursor.
+        if (this.#trayOpen) {
+          this.#setTrayOpen(false);
+          const rect = pill.getBoundingClientRect();
+          offsetX = Math.min(event.clientX - rect.left, this.#badge.offsetWidth);
+        }
       }
 
       const left = Math.min(Math.max(0, event.clientX - offsetX), window.innerWidth - pill.offsetWidth);
@@ -148,13 +318,20 @@ export class PeekOverlay {
     });
 
     const end = (event: PointerEvent) => {
+      if (!pressed) {
+        return;
+      }
+
+      pressed = false;
+      (event.target as HTMLElement).releasePointerCapture?.(event.pointerId);
+
       if (!dragging) {
         return;
       }
 
       dragging = false;
       delete pill.dataset.dragging;
-      pill.releasePointerCapture(event.pointerId);
+      this.#anchorPill();
     };
 
     pill.addEventListener('pointerup', end);
@@ -196,26 +373,69 @@ export class PeekOverlay {
       loading: 'Reading page…',
       armed: 'Hover anything',
       locked: 'Pinned',
-      xray: 'X-ray',
+      xray: 'X-ray on',
       degraded: 'Partial coverage',
       error: 'Peek unavailable',
     };
 
-    this.#pillLabel.textContent = labels[state];
-
     const active = this.#armed;
-    this.#inspectButton.hidden = active;
-    this.#xrayButton.hidden = active;
+
+    // The mark is the state indicator now: it goes active the moment Peek is actually inspecting.
+    this.#pill.dataset.active = String(active);
+    this.#badge.title = labels[state];
+    this.#badge.setAttribute('aria-label', `Peek content inspector — ${labels[state]}`);
+
+    // Dormant needs no caption; the icon says it. Armed, X-ray and degraded need none either —
+    // each is already said by a button's own pressed state or the pill's border colour, so a
+    // caption repeating that would just be the same fact twice.
+    this.#statusLabel.textContent = labels[state];
+    this.#statusLabel.hidden =
+      state === 'dormant' || state === 'armed' || state === 'xray' || state === 'degraded';
+
+    this.#syncButtons();
     this.#stopButton.hidden = !active;
+
+    // A state the user did not ask for — a slow read, a page Peek only half understands — has to
+    // surface on its own rather than wait for them to open the tray and find it.
+    if (state === 'loading' || state === 'degraded' || state === 'error') {
+      this.#setTrayOpen(true);
+    } else {
+      this.#syncTrayWidth();
+    }
+  }
+
+  /** Reflects Inspect and X-ray's own on/off state onto their buttons — independent of each other. */
+  #syncButtons(): void {
+    this.#inspectButton.setAttribute('aria-pressed', String(this.#inspectOn));
+    this.#xrayButton.setAttribute('aria-pressed', String(this.#xrayOn));
   }
 
   async toggle(): Promise<void> {
+    if (this.#inspectOn) {
+      this.#inspectOn = false;
+
+      if (this.#xrayOn) {
+        // X-ray still wants the hover engine running; only Inspect's own indicator goes off.
+        this.#syncButtons();
+      } else {
+        this.disarm();
+      }
+
+      return;
+    }
+
     if (this.#armed) {
-      this.disarm();
+      // Already armed because X-ray asked for it; just light up Inspect's own indicator.
+      this.#inspectOn = true;
+      this.#syncButtons();
       return;
     }
 
     await this.arm();
+    if (this.#state !== 'error') {
+      this.#inspectOn = true;
+      this.#syncButtons();
+    }
   }
 
   async arm(): Promise<void> {
@@ -237,18 +457,26 @@ export class PeekOverlay {
   disarm(): void {
     this.#pinned = false;
     this.#activeRegion = null;
+    this.#inspectOn = false;
+    this.#xrayOn = false;
     this.#setState('dormant');
     clear(this.#layer);
     this.#closeCard();
     this.#closePanel();
-    this.#pill.querySelector('[data-action="xray"]')?.setAttribute('aria-pressed', 'false');
   }
 
   async toggleXray(): Promise<void> {
-    if (this.#state === 'xray') {
+    if (this.#xrayOn) {
+      this.#xrayOn = false;
       this.#closePanel();
-      this.#setState('armed');
-      this.#pill.querySelector('[data-action="xray"]')?.setAttribute('aria-pressed', 'false');
+
+      if (this.#inspectOn) {
+        // Inspect is still explicitly on; drop back to its state rather than disarming outright.
+        this.#setState(this.#summary && this.#summary.coverage < LOW_COVERAGE ? 'degraded' : 'armed');
+      } else {
+        this.disarm();
+      }
+
       this.#renderHighlights();
       return;
     }
@@ -260,8 +488,8 @@ export class PeekOverlay {
       }
     }
 
+    this.#xrayOn = true;
     this.#setState('xray');
-    this.#pill.querySelector('[data-action="xray"]')?.setAttribute('aria-pressed', 'true');
     this.#renderHighlights();
     this.#renderPanel();
   }
