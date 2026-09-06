@@ -92,6 +92,11 @@ public sealed class PeekCandidateCollector
         private readonly List<string> _warnings = [];
         private int _nextId = 1;
 
+        // A block's own IPublishedElement carries no real name, update date or writer — those only
+        // exist on the document that hosts it. Tracking the nearest owning document lets a block's
+        // node borrow that document's metadata instead of showing Umbraco's defaults for it.
+        private Guid _ownerDocumentKey;
+
         public Walk(PeekCandidateCollector owner, string? culture, string? segment, PeekOptions options)
         {
             _owner = owner;
@@ -131,57 +136,70 @@ public sealed class PeekCandidateCollector
                 return;
             }
 
-            RegisterNode(element);
+            var kind = RegisterNode(element);
 
-            foreach (var propertyType in element.ContentType.PropertyTypes)
+            var previousOwner = _ownerDocumentKey;
+            if (kind != PeekNodeKind.Element)
             {
-                if (AtCapacity)
+                _ownerDocumentKey = element.Key;
+            }
+
+            try
+            {
+                foreach (var propertyType in element.ContentType.PropertyTypes)
                 {
-                    Truncated = true;
-                    return;
+                    if (AtCapacity)
+                    {
+                        Truncated = true;
+                        return;
+                    }
+
+                    var property = element.GetProperty(propertyType.Alias);
+                    if (property is null)
+                    {
+                        continue;
+                    }
+
+                    // Pass the culture only for properties that actually vary by it. Umbraco tolerates
+                    // either, but being explicit here is what lets the manifest tell the user that one
+                    // value is shared across every language.
+                    var variesByCulture = propertyType.Variations.VariesByCulture();
+                    var variesBySegment = propertyType.Variations.VariesBySegment();
+                    var propertyCulture = variesByCulture ? _culture : null;
+                    var propertySegment = variesBySegment ? _segment : null;
+
+                    object? value;
+                    try
+                    {
+                        value = property.GetValue(propertyCulture, propertySegment);
+                    }
+                    catch (Exception ex)
+                    {
+                        // A third-party value converter throwing must not take the page down with it.
+                        _owner._logger.LogDebug(
+                            ex,
+                            "Peek could not read {ContentType}.{Property}",
+                            element.ContentType.Alias,
+                            propertyType.Alias);
+                        _warnings.Add($"Could not read {element.ContentType.Alias}.{propertyType.Alias}");
+                        continue;
+                    }
+
+                    var context = new PropertyContext(
+                        element,
+                        propertyType,
+                        propertyCulture,
+                        propertySegment,
+                        variesByCulture,
+                        sourceKind,
+                        breadcrumb);
+
+                    AddValue(value, context, depth);
                 }
-
-                var property = element.GetProperty(propertyType.Alias);
-                if (property is null)
-                {
-                    continue;
-                }
-
-                // Pass the culture only for properties that actually vary by it. Umbraco tolerates
-                // either, but being explicit here is what lets the manifest tell the user that one
-                // value is shared across every language.
-                var variesByCulture = propertyType.Variations.VariesByCulture();
-                var variesBySegment = propertyType.Variations.VariesBySegment();
-                var propertyCulture = variesByCulture ? _culture : null;
-                var propertySegment = variesBySegment ? _segment : null;
-
-                object? value;
-                try
-                {
-                    value = property.GetValue(propertyCulture, propertySegment);
-                }
-                catch (Exception ex)
-                {
-                    // A third-party value converter throwing must not take the page down with it.
-                    _owner._logger.LogDebug(
-                        ex,
-                        "Peek could not read {ContentType}.{Property}",
-                        element.ContentType.Alias,
-                        propertyType.Alias);
-                    _warnings.Add($"Could not read {element.ContentType.Alias}.{propertyType.Alias}");
-                    continue;
-                }
-
-                var context = new PropertyContext(
-                    element,
-                    propertyType,
-                    propertyCulture,
-                    propertySegment,
-                    variesByCulture,
-                    sourceKind,
-                    breadcrumb);
-
-                AddValue(value, context, depth);
+            }
+            finally
+            {
+                _ownerDocumentKey = previousOwner;
             }
         }
 
@@ -441,11 +459,11 @@ public sealed class PeekCandidateCollector
             };
         }
 
-        private void RegisterNode(IPublishedElement element)
+        private PeekNodeKind RegisterNode(IPublishedElement element)
         {
-            if (_nodes.ContainsKey(element.Key))
+            if (_nodes.TryGetValue(element.Key, out var existing))
             {
-                return;
+                return existing.Kind;
             }
 
             var content = element as IPublishedContent;
@@ -458,11 +476,17 @@ public sealed class PeekCandidateCollector
 
             var (typeName, typeIcon) = LookupContentType(element.ContentType.Key, kind);
 
+            // A block (or any other bare IPublishedElement) is not an IPublishedContent, so it has
+            // no name, update date or writer of its own — Umbraco hands back defaults for those.
+            // Borrow the owning document's instead; that document is the thing someone actually
+            // edited.
+            var owner = kind == PeekNodeKind.Element ? _nodes.GetValueOrDefault(_ownerDocumentKey) : null;
+
             _nodes[element.Key] = new PeekNodeRef
             {
                 Key = element.Key,
                 Id = element.Id,
-                Name = content?.Name ?? element.Name,
+                Name = content?.Name ?? owner?.Name ?? element.Name,
                 Kind = kind,
                 ContentTypeAlias = element.ContentType.Alias,
                 ContentTypeName = typeName,
@@ -477,10 +501,12 @@ public sealed class PeekCandidateCollector
                     _ => _owner._backofficeUrls.ElementWorkspace(element.Key, _culture),
                 },
                 PublishState = PublishStateFor(element, kind),
-                UpdateDate = element.UpdateDate,
-                LastEditedBy = LookupUser(element.WriterId),
-                Cultures = element.Cultures.Keys.ToList(),
+                UpdateDate = owner?.UpdateDate ?? element.UpdateDate,
+                LastEditedBy = owner?.LastEditedBy ?? LookupUser(element.WriterId),
+                Cultures = owner?.Cultures ?? element.Cultures.Keys.ToList(),
             };
+
+            return kind;
         }
 
         private PeekPublishState PublishStateFor(IPublishedElement element, PeekNodeKind kind)
