@@ -76,11 +76,9 @@ export class PeekOverlay {
   #dragMoved = false;
 
   /**
-   * Inspect and X-ray are independent switches the user can combine, even though X-ray always needs
-   * the same hover engine Inspect turns on. These track which of the two the user actually pressed,
-   * so turning one off only disarms the engine when the other isn't still asking for it — and the
-   * two buttons never light up together just because the engine happens to be running for one of
-   * them.
+   * Inspect and X-ray are mutually exclusive: at most one of these is ever true. Each one's button
+   * is disabled while the other mode is running (see #syncButtons), so switching modes means
+   * stopping the current one first rather than the two running together.
    */
   #inspectOn = false;
   #xrayOn = false;
@@ -196,6 +194,14 @@ export class PeekOverlay {
         return;
       }
 
+      // Once a mode is running, the tray is its control panel, not a collapsible drawer — closing
+      // it here would hide Inspect/X-ray/Stop with no way back except dragging the mark to reopen
+      // it, and Stop is the only thing that is allowed to end a running mode (see #stopButton).
+      // Dormant is the only time a press on the mark is a plain open/close toggle.
+      if (this.#armed) {
+        return;
+      }
+
       this.#setTrayOpen(!this.#trayOpen);
     });
 
@@ -231,23 +237,15 @@ export class PeekOverlay {
     this.#pill.dataset.open = String(open);
     this.#badge.setAttribute('aria-expanded', String(open));
     this.#tray.setAttribute('aria-hidden', String(!open));
-
-    // Pre-clamp for the width the tray is about to animate to, not the width it has right now:
-    // the mark always leads the row and nothing unfurls to its left, so a mark sitting near the
-    // right edge (its usual resting spot) has to slide left in step with the tray opening, or the
-    // buttons animate straight off the edge of the screen. #trayInner is unclipped and untransitioned
-    // itself, so its width is exactly the tray's target — reading it here does not have to wait for
-    // the tray's own width transition to finish. The panel governs its own width instead (see
-    // #openPanel), so this only applies while it is shut.
-    if (!this.#panel) {
-      const current = this.#pill.getBoundingClientRect().width;
-      const trayWidth = this.#trayInner.offsetWidth;
-      const future = open ? current + trayWidth : current - trayWidth;
-      this.#fitPillForWidth(future);
-    }
-
     this.#syncTrayWidth();
   }
+
+  /**
+   * The pill's own border, in pixels — fixed by `.peek-pill`'s `border: 1px solid` and never
+   * overridden by any state, including expanded. It never changes, so it is cheaper to name than to
+   * remeasure every time #syncTrayWidth needs the pill's true target width.
+   */
+  static readonly #PILL_BORDER = 2;
 
   #syncTrayWidth(): void {
     // Expanded, the row is as wide as the panel below it and the tray just fills what is left of
@@ -258,6 +256,18 @@ export class PeekOverlay {
     }
 
     this.#tray.style.width = this.#trayOpen ? `${this.#trayInner.offsetWidth}px` : '0px';
+
+    // Reclamp for the width this is about to animate to (or has just changed to without any
+    // animation at all — Stop or the status label appearing mid-state-change), not whatever the
+    // pill's own rect still says: the tray's width transition, and the pill's position transition
+    // that has to move with it, both start from this same call, and #trayInner is unclipped and
+    // untransitioned so its width is already the real target rather than a value still mid-flight.
+    // Reading the mark and the border directly, rather than the pill's current rect, is what keeps
+    // this correct even when the tray was already open and only its *contents* changed size — the
+    // one case a before/after diff on the pill's own width cannot see coming.
+    const badgeWidth = this.#badge.getBoundingClientRect().width;
+    const trayWidth = this.#trayOpen ? this.#trayInner.offsetWidth : 0;
+    this.#fitPillForWidth(badgeWidth + trayWidth + PeekOverlay.#PILL_BORDER);
   }
 
   /**
@@ -467,30 +477,24 @@ export class PeekOverlay {
     }
   }
 
-  /** Reflects Inspect and X-ray's own on/off state onto their buttons — independent of each other. */
+  /**
+   * Reflects Inspect and X-ray's own on/off state onto their buttons, and disables both of them
+   * once either is running. Mutually exclusive modes have to look that way, not just behave that
+   * way; and Stop is the only thing allowed to end a running mode now (see #stopButton), so the
+   * mode buttons themselves have nothing left to do once one of them is on — pressing the active
+   * one again no longer stops it.
+   */
   #syncButtons(): void {
     this.#inspectButton.setAttribute('aria-pressed', String(this.#inspectOn));
     this.#xrayButton.setAttribute('aria-pressed', String(this.#xrayOn));
+    this.#inspectButton.disabled = this.#armed;
+    this.#xrayButton.disabled = this.#armed;
   }
 
   async toggle(): Promise<void> {
-    if (this.#inspectOn) {
-      this.#inspectOn = false;
-
-      if (this.#xrayOn) {
-        // X-ray still wants the hover engine running; only Inspect's own indicator goes off.
-        this.#syncButtons();
-      } else {
-        this.disarm();
-      }
-
-      return;
-    }
-
     if (this.#armed) {
-      // Already armed because X-ray asked for it; just light up Inspect's own indicator.
-      this.#inspectOn = true;
-      this.#syncButtons();
+      // Only Stop ends a running mode now — the button is disabled for exactly this reason, but
+      // the keyboard shortcut reaches here regardless, so the guard has to live here too.
       return;
     }
 
@@ -529,29 +533,14 @@ export class PeekOverlay {
   }
 
   async toggleXray(): Promise<void> {
-    if (this.#xrayOn) {
-      this.#xrayOn = false;
-      this.#closePanel();
-
-      if (this.#inspectOn) {
-        // Inspect is still explicitly on; drop back to its state rather than disarming outright,
-        // and redraw without the unattributed outlines only X-ray asks for.
-        this.#setState(this.#summary && this.#summary.coverage < LOW_COVERAGE ? 'degraded' : 'armed');
-        this.#renderHighlights();
-      } else {
-        // disarm() already cleared the layer, and the summary it drew from is still in hand:
-        // redrawing here would put every outline straight back on a page Peek has left.
-        this.disarm();
-      }
-
+    if (this.#armed) {
+      // Only Stop ends a running mode now — see #toggle.
       return;
     }
 
-    if (!this.#armed) {
-      await this.arm();
-      if (this.#state === 'error') {
-        return;
-      }
+    await this.arm();
+    if (this.#state === 'error') {
+      return;
     }
 
     this.#xrayOn = true;

@@ -279,6 +279,10 @@ export const OVERLAY_STYLES = /* css */ `
 .peek-tray button[data-action="stop"] { color: var(--peek-stop); }
 .peek-tray button[hidden] { display: none; }
 
+/* Inspect and X-ray are mutually exclusive: whichever isn't running reads as unavailable, not just
+   inert, so a press that does nothing doesn't look like a bug. */
+.peek-tray button:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
+
 @media (prefers-reduced-motion: reduce) {
   .peek-tray,
   .peek-tray-inner,
