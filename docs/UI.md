@@ -44,7 +44,7 @@ Bottom-right, draggable (it *will* end up on top of somebody's chat widget), six
 | loading | "Reading page…" | Fetching the manifest |
 | armed | "Hover anything" | Live |
 | locked | "Pinned" | A card is pinned |
-| xray | "X-ray" | Everything outlined, panel open |
+| xray | "X-ray" | Everything outlined, the pill expanded into its panel |
 | degraded | "Partial coverage" | Armed, but coverage is below 60% |
 
 <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd> arms it. Not <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd>
@@ -88,7 +88,27 @@ URL, node, doctype, property, culture, viewport and backoffice link.
 
 ### X-ray mode — implemented
 
-Outlines everything at once and opens a panel:
+Outlines everything at once and **expands the pill itself into a panel** — the panel is a child of
+`.peek-pill`, below the button row and separated from it by a single hairline.
+
+It was a card floating at the right of the viewport first, and that was wrong twice over: it left the
+user with two objects to keep track of when they had asked one question, and it broke the pill's own
+promise that Peek is a thing you can pick up and move out of the way. Nested, the panel inherits the
+pill's position for free — drag the mark and the panel goes with it — and it inherits the pill's
+palette, so it stays a white chip in both schemes rather than a dark card bolted to a light one.
+Everything inside it is drawn from the `--peek-pill-*` tokens for that reason, including a
+light-ground copy of the kind scale: the dark-mode kind colours are tuned for a dark surface and go
+washed out on white.
+
+The row keeps its shape as the panel's header. **Inspect and X-ray stay beside the mark**, where they
+were before anything expanded, and the mark itself does not move. Only **Stop** relocates, to the far
+end of the row — a "leave this mode" control belongs away from the two switches, not under the cursor
+that is working them.
+
+Expanding pulls the pill up the page far enough for the panel to fit, and collapsing puts it back
+where the user left it. A drag in between cancels that: wherever they put it is where it lives now.
+
+The panel contains:
 
 - **Coverage bar**, always shown, honest. "84% of visible text attributed · 6 unattributed."
 - **Filter chips** double as the legend and as toggles. Clicking "Shared" dims everything that is not

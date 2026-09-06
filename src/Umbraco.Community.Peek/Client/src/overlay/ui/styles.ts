@@ -37,10 +37,19 @@ export const OVERLAY_STYLES = /* css */ `
   /* The pill is a fixed white chip in both schemes. It carries the Peek mark, which is drawn for a
      light ground, so a dark-mode surface behind it would leave the mark floating on its own halo. */
   --peek-pill-surface: #ffffff;
+  --peek-pill-surface-2: #f4f4f8;
   --peek-pill-border: rgba(20, 20, 40, 0.12);
   --peek-pill-text: #1b1b1f;
   --peek-pill-text-dim: #28395d;
   --peek-pill-hover: #f1f1f5;
+
+  /* The kind scale, pinned to its light-ground values. Everything the pill contains sits on white
+     in both schemes, so it cannot use the dark-mode kind colours — those are tuned to be legible
+     on a dark surface and go washed out here. The soft fills are rgba and need no twin. */
+  --peek-pill-owned: #3544b1;
+  --peek-pill-block: #7b3fb5;
+  --peek-pill-shared: #b8730c;
+  --peek-pill-media: #0f7b6c;
 
   --peek-radius: 8px;
   --peek-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
@@ -113,7 +122,8 @@ export const OVERLAY_STYLES = /* css */ `
   right: 20px;
   bottom: 20px;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   background: var(--peek-pill-surface);
   border: 1px solid var(--peek-pill-border);
   border-radius: 20px;
@@ -124,9 +134,37 @@ export const OVERLAY_STYLES = /* css */ `
   -webkit-user-select: none;
 }
 
+.peek-pill-row {
+  display: flex;
+  align-items: center;
+  flex: none;
+}
+
 /* Dropped on the right of the viewport, the tray has to unfurl to the left of the mark. */
-.peek-pill[data-side="right"] { flex-direction: row-reverse; }
-.peek-pill[data-side="left"]  { flex-direction: row; }
+.peek-pill[data-side="right"] .peek-pill-row { flex-direction: row-reverse; }
+.peek-pill[data-side="left"]  .peek-pill-row { flex-direction: row; }
+
+/* Expanded, the pill is the panel: the same chip, grown downwards. The row end stays fully round so
+   it still reads as the pill it was; the foot relaxes to a card corner, because 22px on a 300px-tall
+   element reads as a lozenge. The row keeps its own height, so the mark does not move.
+
+   The pill itself must not clip: the mark sits flush in the corner, and a radius across it shaves
+   the icon. Only the panel clips, which is all that is needed for its own corners to follow. */
+.peek-pill[data-expanded="true"] {
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  border-radius: 22px 22px 14px 14px;
+}
+
+.peek-pill[data-expanded="true"] .peek-panel {
+  border-bottom-left-radius: 13px;
+  border-bottom-right-radius: 13px;
+  overflow: hidden;
+}
+
+/* Expanding pulls the pill up the page to make room; animate that rather than teleport. A drag
+   writes an explicit top on every pointermove, so it has to opt out or the pill lags the cursor. */
+.peek-pill:not([data-dragging="true"]) { transition: top 200ms cubic-bezier(0.2, 0.8, 0.2, 1); }
 
 .peek-pill[data-state="armed"],
 .peek-pill[data-state="locked"] { border-color: var(--peek-owned); }
@@ -197,6 +235,18 @@ export const OVERLAY_STYLES = /* css */ `
 /* A hairline where the tray meets the mark, on whichever side the tray unfurled. */
 .peek-pill[data-side="right"] .peek-tray-inner { border-right: 1px solid var(--peek-pill-border); padding-left: 10px; }
 .peek-pill[data-side="left"]  .peek-tray-inner { border-left: 1px solid var(--peek-pill-border); padding-right: 10px; }
+
+/* Expanded, the row is as wide as the panel, so the tray takes whatever the mark leaves. Inspect
+   and X-ray stay where they have always been, next to the mark; only Stop is pushed out to the far
+   end of the card — a "leave this mode" control belongs away from the two switches, not beside
+   them where the cursor is already working. */
+.peek-pill[data-expanded="true"] .peek-tray { flex: 1 1 auto; width: auto; overflow: visible; }
+.peek-pill[data-expanded="true"] .peek-tray-inner { width: 100%; }
+.peek-pill[data-expanded="true"][data-side="left"] .peek-tray button[data-action="stop"] { margin-left: auto; }
+
+/* Anchored right the row is reversed, so the far end is the left one: send Stop to the head of the
+   tray and let the auto margin do the pushing from that side instead. */
+.peek-pill[data-expanded="true"][data-side="right"] .peek-tray button[data-action="stop"] { order: -1; margin-right: auto; }
 
 .peek-tray .peek-status {
   font-family: var(--peek-font);
@@ -381,27 +431,32 @@ export const OVERLAY_STYLES = /* css */ `
   padding: 0 3px;
 }
 
-/* ---------------------------------------------------------------- x-ray panel */
+/* ---------------------------------------------------------------- x-ray panel
+
+   The panel is not a window of its own — it is the pill, unfurled. It lives inside .peek-pill, so
+   it inherits the pill's position (drag the mark, the panel comes along) and the pill's palette: a
+   fixed white ground in both schemes, hairline borders, the mark's own blue. A separate dark
+   surface here would read as a second, unrelated tool bolted to the chip. */
 
 .peek-panel {
-  position: absolute;
-  right: 20px;
-  bottom: 74px;
-  width: 380px;
-  max-height: min(70vh, 620px);
   display: flex;
   flex-direction: column;
-  background: var(--peek-surface);
-  border: 1px solid var(--peek-border);
-  border-radius: var(--peek-radius);
-  box-shadow: var(--peek-shadow);
-  pointer-events: auto;
-  overflow: hidden;
+  min-height: 0;
+  max-height: min(58vh, 460px);
+  background: var(--peek-pill-surface);
+  color: var(--peek-pill-text);
+  font-size: 12.5px;
+  line-height: 1.45;
+
+  /* The seam between the buttons and the panel. It is the whole reason the two read as one object
+     with a fold in it rather than as a card that happens to be touching a pill. */
+  border-top: 1px solid var(--peek-pill-border);
 }
 
 .peek-panel-head {
+  flex: none;
   padding: 11px 13px;
-  border-bottom: 1px solid var(--peek-border);
+  border-bottom: 1px solid var(--peek-pill-border);
 }
 
 .peek-panel-title {
@@ -411,12 +466,13 @@ export const OVERLAY_STYLES = /* css */ `
   gap: 8px;
   font-size: 13px;
   font-weight: 700;
+  color: var(--peek-pill-text);
 }
 
 .peek-panel-title small {
   font-weight: 500;
   font-size: 11px;
-  color: var(--peek-text-dim);
+  color: var(--peek-pill-text-dim);
   font-family: var(--peek-mono);
 }
 
@@ -425,14 +481,14 @@ export const OVERLAY_STYLES = /* css */ `
 .peek-coverage-bar {
   height: 5px;
   border-radius: 3px;
-  background: var(--peek-surface-2);
+  background: var(--peek-pill-surface-2);
   overflow: hidden;
 }
 
 .peek-coverage-bar i {
   display: block;
   height: 100%;
-  background: var(--peek-owned);
+  background: var(--peek-pill-owned);
 }
 
 .peek-coverage-bar[data-low="true"] i { background: var(--peek-stop); }
@@ -441,7 +497,7 @@ export const OVERLAY_STYLES = /* css */ `
   display: flex;
   justify-content: space-between;
   font-size: 11px;
-  color: var(--peek-text-dim);
+  color: var(--peek-pill-text-dim);
   margin-top: 4px;
 }
 
@@ -455,25 +511,37 @@ export const OVERLAY_STYLES = /* css */ `
   gap: 5px;
   padding: 3px 9px;
   border-radius: 999px;
-  border: 1px solid var(--peek-border);
+  border: 1px solid var(--peek-pill-border);
+  font-family: var(--peek-font);
   font-size: 11px;
   font-weight: 600;
+  color: var(--peek-pill-text);
+  transition: background 120ms ease;
 }
 
+.peek-chip:hover { background: var(--peek-pill-hover); }
+.peek-chip:focus-visible { outline: 2px solid var(--peek-pill-owned); outline-offset: 1px; }
 .peek-chip[aria-pressed="false"] { opacity: 0.45; }
 .peek-chip i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-.peek-chip[data-tone="owned"] i  { background: var(--peek-owned); }
-.peek-chip[data-tone="block"] i  { background: var(--peek-block); }
-.peek-chip[data-tone="shared"] i { background: var(--peek-shared); }
-.peek-chip[data-tone="media"] i  { background: var(--peek-media); }
+.peek-chip[data-tone="owned"] i  { background: var(--peek-pill-owned); }
+.peek-chip[data-tone="block"] i  { background: var(--peek-pill-block); }
+.peek-chip[data-tone="shared"] i { background: var(--peek-pill-shared); }
+.peek-chip[data-tone="media"] i  { background: var(--peek-pill-media); }
 .peek-chip[data-tone="unattributed"] i { background: transparent; border: 1px dashed var(--peek-unattributed); }
 
 .peek-panel-list {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 6px 6px 10px;
 }
 
+/* A <button>, so it needs the same reset the chips get: left alone it paints the UA's grey
+   buttonface, which on the panel's white ground reads as a filled block behind every row. */
 .peek-row {
+  all: unset;
+  box-sizing: border-box;
   display: flex;
   align-items: flex-start;
   gap: 8px;
@@ -483,14 +551,18 @@ export const OVERLAY_STYLES = /* css */ `
   cursor: pointer;
   border: 1px solid transparent;
   text-align: left;
+  font-family: var(--peek-font);
+  color: var(--peek-pill-text);
+  transition: background 120ms ease;
 }
 
-.peek-row:hover { background: var(--peek-surface-2); }
+.peek-row:hover { background: var(--peek-pill-hover); }
+.peek-row:focus-visible { outline: 2px solid var(--peek-pill-owned); outline-offset: -1px; }
 .peek-row i { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex: none; }
-.peek-row[data-kind="OwnedProperty"] i { background: var(--peek-owned); }
-.peek-row[data-kind="Block"] i { background: var(--peek-block); }
-.peek-row[data-kind="Shared"] i { background: var(--peek-shared); }
-.peek-row[data-kind="Media"] i { background: var(--peek-media); }
+.peek-row[data-kind="OwnedProperty"] i { background: var(--peek-pill-owned); }
+.peek-row[data-kind="Block"] i { background: var(--peek-pill-block); }
+.peek-row[data-kind="Shared"] i { background: var(--peek-pill-shared); }
+.peek-row[data-kind="Media"] i { background: var(--peek-pill-media); }
 .peek-row[data-rendered="false"] i { background: transparent; border: 1px dashed var(--peek-unattributed); }
 
 .peek-row-main { min-width: 0; flex: 1; }
@@ -506,7 +578,7 @@ export const OVERLAY_STYLES = /* css */ `
 
 .peek-row-note {
   font-size: 10.5px;
-  color: var(--peek-text-dim);
+  color: var(--peek-pill-text-dim);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -515,10 +587,11 @@ export const OVERLAY_STYLES = /* css */ `
 .peek-row-note[data-tone="warn"] { color: var(--peek-stop); font-weight: 600; }
 
 .peek-panel-foot {
+  flex: none;
   padding: 8px 13px;
-  border-top: 1px solid var(--peek-border);
+  border-top: 1px solid var(--peek-pill-border);
   font-size: 10.5px;
-  color: var(--peek-text-dim);
+  color: var(--peek-pill-text-dim);
 }
 
 .peek-notice {
@@ -527,6 +600,7 @@ export const OVERLAY_STYLES = /* css */ `
   border-radius: 6px;
   background: rgba(184, 50, 12, 0.10);
   color: var(--peek-stop);
+  font-family: var(--peek-font);
   font-size: 11.5px;
   font-weight: 600;
 }
@@ -534,7 +608,7 @@ export const OVERLAY_STYLES = /* css */ `
 .peek-empty {
   padding: 22px 14px;
   text-align: center;
-  color: var(--peek-text-dim);
+  color: var(--peek-pill-text-dim);
   font-size: 12px;
 }
 `;

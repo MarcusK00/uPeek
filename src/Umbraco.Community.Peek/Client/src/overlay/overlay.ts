@@ -61,6 +61,7 @@ export class PeekOverlay {
 
   #layer!: HTMLDivElement;
   #pill!: HTMLDivElement;
+  #pillRow!: HTMLDivElement;
   #badge!: HTMLButtonElement;
   #tray!: HTMLDivElement;
   #trayInner!: HTMLDivElement;
@@ -85,6 +86,13 @@ export class PeekOverlay {
   #xrayOn = false;
   #card: HTMLDivElement | null = null;
   #panel: HTMLDivElement | null = null;
+
+  /**
+   * Where the pill sat before the panel unfurled underneath it. Expanding has to pull the pill up
+   * the page so the panel fits on screen; collapsing puts it back exactly where the user left it,
+   * unless they moved it in the meantime — a drag clears this.
+   */
+  #collapsedPosition: { top: string; bottom: string; left: string; right: string } | null = null;
 
   #activeRegion: PeekRegion | null = null;
   #pinned = false;
@@ -155,6 +163,10 @@ export class PeekOverlay {
 
     this.#tray = el('div', { class: 'peek-tray', 'aria-hidden': 'true' }, this.#trayInner);
 
+    // The badge and the tray are their own row inside the pill, so the X-ray panel can be a second
+    // row underneath it: one element, one position, one thing to drag.
+    this.#pillRow = el('div', { class: 'peek-pill-row' }, this.#badge, this.#tray);
+
     this.#pill = el(
       'div',
       {
@@ -162,12 +174,12 @@ export class PeekOverlay {
         'data-state': 'dormant',
         'data-active': 'false',
         'data-open': 'false',
+        'data-expanded': 'false',
         'data-side': 'right',
         role: 'group',
         'aria-label': 'Peek content inspector',
       },
-      this.#badge,
-      this.#tray,
+      this.#pillRow,
     );
 
     this.#badge.addEventListener('click', (event) => {
@@ -218,6 +230,13 @@ export class PeekOverlay {
   }
 
   #syncTrayWidth(): void {
+    // Expanded, the row is as wide as the panel below it and the tray just fills what is left of
+    // the row — an explicit pixel width would fight that, and there is nothing to unfurl anyway.
+    if (this.#panel) {
+      this.#tray.style.width = '';
+      return;
+    }
+
     this.#tray.style.width = this.#trayOpen ? `${this.#trayInner.offsetWidth}px` : '0px';
   }
 
@@ -245,6 +264,23 @@ export class PeekOverlay {
   }
 
   /**
+   * Keep the whole pill — row plus whatever panel is unfurled under it — inside the viewport.
+   *
+   * The panel grows downwards from a chip that usually sits near the bottom of the page, so on
+   * expanding there is rarely room below it. Anchoring by `top` and pulling that top up is what
+   * keeps the row and the panel one object: the alternative, letting the panel find its own place
+   * on screen, is the detached card this replaced.
+   */
+  #fitPill(): void {
+    const height = this.#pill.offsetHeight;
+    const rect = this.#pill.getBoundingClientRect();
+    const top = Math.max(12, Math.min(rect.top, window.innerHeight - height - 12));
+
+    this.#pill.style.top = `${Math.round(top)}px`;
+    this.#pill.style.bottom = 'auto';
+  }
+
+  /**
    * The pill will end up on top of somebody's chat widget. It has to be movable.
    *
    * The icon is now both the drag handle and the tray toggle, so a press only becomes a drag once
@@ -261,8 +297,10 @@ export class PeekOverlay {
     pill.addEventListener('pointerdown', (event) => {
       const target = event.target as HTMLElement;
 
-      // Tray buttons are targets in their own right; a press there is never a drag.
-      if (target.closest?.('.peek-tray')) {
+      // Tray buttons and everything in the panel are targets in their own right; a press there is
+      // never a drag. Without the panel in this list, dragging its scrollbar or swiping its list
+      // would haul the whole pill across the page instead.
+      if (target.closest?.('.peek-tray, .peek-panel')) {
         return;
       }
 
@@ -298,6 +336,9 @@ export class PeekOverlay {
         dragging = true;
         this.#dragMoved = true;
         pill.dataset.dragging = 'true';
+
+        // Wherever this ends up is the pill's home now; collapsing must not undo the move.
+        this.#collapsedPosition = null;
       }
 
       const left = Math.min(Math.max(0, event.clientX - offsetX), window.innerWidth - pill.offsetWidth);
@@ -462,13 +503,16 @@ export class PeekOverlay {
       this.#closePanel();
 
       if (this.#inspectOn) {
-        // Inspect is still explicitly on; drop back to its state rather than disarming outright.
+        // Inspect is still explicitly on; drop back to its state rather than disarming outright,
+        // and redraw without the unattributed outlines only X-ray asks for.
         this.#setState(this.#summary && this.#summary.coverage < LOW_COVERAGE ? 'degraded' : 'armed');
+        this.#renderHighlights();
       } else {
+        // disarm() already cleared the layer, and the summary it drew from is still in hand:
+        // redrawing here would put every outline straight back on a page Peek has left.
         this.disarm();
       }
 
-      this.#renderHighlights();
       return;
     }
 
@@ -482,7 +526,7 @@ export class PeekOverlay {
     this.#xrayOn = true;
     this.#setState('xray');
     this.#renderHighlights();
-    this.#renderPanel();
+    this.#openPanel();
   }
 
   // ------------------------------------------------------------------ data
@@ -608,6 +652,10 @@ export class PeekOverlay {
     }
 
     this.#renderHighlights();
+
+    if (this.#panel) {
+      this.#fitPill();
+    }
 
     if (this.#activeRegion) {
       this.#positionCard(this.#activeRegion);
@@ -1049,19 +1097,66 @@ export class PeekOverlay {
 
   // ------------------------------------------------------------------ x-ray panel
 
-  #closePanel(): void {
-    this.#panel?.remove();
-    this.#panel = null;
-  }
-
-  #renderPanel(): void {
-    this.#closePanel();
-
+  /**
+   * Unfurl the panel out of the pill itself, below the button row, and remember where the pill was
+   * so collapsing can put it back. The panel is a child of the pill on purpose: it inherits the
+   * pill's position, so dragging the mark drags the panel with it.
+   */
+  #openPanel(): void {
     if (!this.#manifest || !this.#summary) {
       return;
     }
 
-    const panel = el('div', { class: 'peek-panel', 'data-peek-ui': 'panel' });
+    if (!this.#panel) {
+      const style = this.#pill.style;
+      this.#collapsedPosition = {
+        top: style.top,
+        bottom: style.bottom,
+        left: style.left,
+        right: style.right,
+      };
+
+      this.#panel = el('div', { class: 'peek-panel', 'data-peek-ui': 'panel' });
+      this.#pill.append(this.#panel);
+      this.#pill.dataset.expanded = 'true';
+
+      // The row is the panel's header now; there is nothing sensible to show with it shut.
+      this.#setTrayOpen(true);
+    }
+
+    this.#renderPanel();
+  }
+
+  #closePanel(): void {
+    if (!this.#panel) {
+      return;
+    }
+
+    this.#panel.remove();
+    this.#panel = null;
+    this.#pill.dataset.expanded = 'false';
+
+    if (this.#collapsedPosition) {
+      const { top, bottom, left, right } = this.#collapsedPosition;
+      this.#pill.style.top = top;
+      this.#pill.style.bottom = bottom;
+      this.#pill.style.left = left;
+      this.#pill.style.right = right;
+      this.#collapsedPosition = null;
+    }
+
+    this.#syncTrayWidth();
+  }
+
+  /** Refill the open panel in place — a filter toggle must not move the pill out from under the
+   *  cursor that just pressed it. */
+  #renderPanel(): void {
+    const panel = this.#panel;
+    if (!panel || !this.#manifest || !this.#summary) {
+      return;
+    }
+
+    clear(panel);
 
     panel.append(this.#renderPanelHead());
 
@@ -1077,8 +1172,14 @@ export class PeekOverlay {
       }),
     );
 
-    this.#panel = panel;
-    this.#root.append(panel);
+    // Measured after the browser has laid the new content out, not from the content it replaced —
+    // and only if that content is still up, or a refit queued just before a close would land on
+    // the collapsed pill and undo the position #closePanel just restored.
+    requestAnimationFrame(() => {
+      if (this.#panel === panel) {
+        this.#fitPill();
+      }
+    });
   }
 
   #renderPanelHead(): HTMLElement {
