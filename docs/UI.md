@@ -16,7 +16,7 @@ overlay is just a box around some text.
 | Purple solid | Item inside a Block List or Block Grid | `--peek-block` |
 | Amber solid | Shared content — Library element or picked node | `--peek-shared` |
 | Teal solid | Media | `--peek-media` |
-| Grey dashed | Rendered text the matcher could not attribute | `--peek-unattributed` |
+| Grey hatched | Rendered text the matcher could not attribute | `--peek-unattributed` |
 | `?` badge | Matched, but more than one possible source | `--peek-warn` |
 
 **Amber is the one that earns its keep.** It is not a warning that something is wrong, it is a
@@ -35,7 +35,10 @@ backoffice theme rather than importing a second design system.
 
 ### The pill — implemented
 
-Bottom-right, draggable (it *will* end up on top of somebody's chat widget), six states:
+Bottom-right, draggable (it *will* end up on top of somebody's chat widget), six states. The mark
+always leads and everything else — the tray, the X-ray panel — always unfurls to its right, never
+its left, regardless of which edge of the viewport it was dropped near; the pill's own left edge is
+the fixed point everything grows from, and it slides left as needed to keep the growth on screen.
 
 | State | Label | Meaning |
 | --- | --- | --- |
@@ -44,7 +47,7 @@ Bottom-right, draggable (it *will* end up on top of somebody's chat widget), six
 | loading | "Reading page…" | Fetching the manifest |
 | armed | "Hover anything" | Live |
 | locked | "Pinned" | A card is pinned |
-| xray | "X-ray" | Everything outlined, panel open |
+| xray | "X-ray" | Everything outlined, the pill expanded into its panel |
 | degraded | "Partial coverage" | Armed, but coverage is below 60% |
 
 <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd> arms it. Not <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd>
@@ -88,12 +91,50 @@ URL, node, doctype, property, culture, viewport and backoffice link.
 
 ### X-ray mode — implemented
 
-Outlines everything at once and opens a panel:
+Outlines everything at once and **expands the pill itself into a panel** — the panel is a child of
+`.peek-pill`, below the button row and separated from it by a single hairline.
+
+It was a card floating at the right of the viewport first, and that was wrong twice over: it left the
+user with two objects to keep track of when they had asked one question, and it broke the pill's own
+promise that Peek is a thing you can pick up and move out of the way. Nested, the panel inherits the
+pill's position for free — drag the mark and the panel goes with it — and it inherits the pill's
+palette, so it stays a white chip in both schemes rather than a dark card bolted to a light one.
+Everything inside it is drawn from the `--peek-pill-*` tokens for that reason, including a
+light-ground copy of the kind scale: the dark-mode kind colours are tuned for a dark surface and go
+washed out on white.
+
+The row keeps its shape as the panel's header. **Inspect and X-ray stay beside the mark**, where they
+were before anything expanded, and the mark itself does not move. Only **Stop** relocates, to the far
+end of the row — a "leave this mode" control belongs away from the two switches, not under the cursor
+that is working them.
+
+Expanding pulls the pill up the page far enough for the panel to fit, and collapsing puts it back
+where the user left it. A drag in between cancels that: wherever they put it is where it lives now.
+
+The panel contains:
 
 - **Coverage bar**, always shown, honest. "84% of visible text attributed · 6 unattributed."
-- **Filter chips** double as the legend and as toggles. Clicking "Shared" dims everything that is not
-  shared — which is exactly how you answer "show me everything on this page I'd be changing for other
-  pages too."
+- **Filter chips** double as the legend and as filters. Clicking "Shared" outlines what is shared —
+  which is exactly how you answer "show me everything on this page I'd be changing for other pages
+  too." Selected chips fill with the kind they select for, so the row keeps working as the legend
+  while it is being used as a filter.
+
+  **Nothing is selected to begin with, and nothing selected means nothing outlined.** X-ray opens on
+  a bare page and an empty list, and every outline from there is one the user asked for by name.
+  Opening straight into a page covered in boxes answers a question nobody asked yet, and it is
+  picking the filters that makes X-ray a question you ask rather than a light you switch on.
+
+  The filters belong to X-ray. **Inspect shares the same highlight layer but has no filter UI**, so
+  an empty filter set means "nothing selected yet" there and "not applicable" in Inspect — which is
+  why `#kindShown` checks the mode and not just the set. Miss that and Inspect silently stops
+  outlining anything at all.
+- **Unattributed** is the odd one out and has to be built differently: it is what is left over once
+  every entry has been matched, so it is DOM elements rather than manifest entries. It gets rows of
+  its own — the element (`footer#site-footer`) and the text it holds — because a filter that
+  outlines the page but leaves the list empty reads as having found nothing. On the page it is
+  **hatched**, not hairlined: grey is the right colour (it means "Peek cannot say", and it must not
+  borrow one of the four kinds), but a 1px dashed outline on transparent was invisible enough that
+  turning the filter on looked like nothing happening.
 - **Entry list**, rendered first, then the interesting ones: values that exist and did not make it
   into the page, labelled `read, not rendered`. Clicking a row scrolls to and pins it; clicking one
   with nowhere to scroll opens it in the backoffice.

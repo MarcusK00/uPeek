@@ -18,6 +18,9 @@ const LOW_COVERAGE = 0.6;
 /** How far a pointer may travel before a press on the pill counts as a drag, not a click. */
 const DRAG_SLOP = 4;
 
+/** How long the panel takes to fold in or out of the row. Must match .peek-pill[data-folding]. */
+const FOLD_MS = 240;
+
 /**
  * Resolve a file shipped alongside the bundle in `wwwroot/App_Plugins/Peek`.
  *
@@ -61,6 +64,7 @@ export class PeekOverlay {
 
   #layer!: HTMLDivElement;
   #pill!: HTMLDivElement;
+  #pillRow!: HTMLDivElement;
   #badge!: HTMLButtonElement;
   #tray!: HTMLDivElement;
   #trayInner!: HTMLDivElement;
@@ -75,22 +79,60 @@ export class PeekOverlay {
   #dragMoved = false;
 
   /**
-   * Inspect and X-ray are independent switches the user can combine, even though X-ray always needs
-   * the same hover engine Inspect turns on. These track which of the two the user actually pressed,
-   * so turning one off only disarms the engine when the other isn't still asking for it — and the
-   * two buttons never light up together just because the engine happens to be running for one of
-   * them.
+   * Inspect and X-ray are mutually exclusive: at most one of these is ever true. Each one's button
+   * is disabled while the other mode is running (see #syncButtons), so switching modes means
+   * stopping the current one first rather than the two running together.
    */
   #inspectOn = false;
   #xrayOn = false;
   #card: HTMLDivElement | null = null;
   #panel: HTMLDivElement | null = null;
 
+  /**
+   * Where the pill sat before the panel unfurled underneath it. Expanding has to pull the pill up
+   * the page so the panel fits on screen; collapsing puts it back exactly where the user left it,
+   * unless they moved it in the meantime — a drag clears this.
+   */
+  #collapsedPosition: { top: string; bottom: string; left: string; right: string } | null = null;
+
+  /**
+   * The size a fold in flight is heading for. Any fit that lands mid-fold — a scroll, a resize, the
+   * panel's own post-render fit — has to clamp against where the pill is going, not the half-way
+   * size it happens to be showing.
+   */
+  #foldTarget: { width: number; height: number } | null = null;
+
+  /**
+   * The panel a fold-out is closing over. It is out of #panel the moment the fold starts — as far
+   * as the rest of the overlay is concerned the panel is already shut — but it stays in the DOM,
+   * clipped by the shrinking pill, until the fold lands. #endFold is what actually removes it.
+   */
+  #foldingPanel: HTMLDivElement | null = null;
+  #foldTimer = 0;
+
   #activeRegion: PeekRegion | null = null;
   #pinned = false;
   #candidateIndex = 0;
-  #hiddenKinds = new Set<string>();
+  /**
+   * Which source kinds the user has asked to see. Nothing is selected to begin with, and nothing
+   * selected means nothing shown: X-ray opens on a bare page and every outline is something the
+   * user asked for by name. Opening straight into a page covered in boxes answers a question
+   * nobody asked yet, and it is the filters that make it a tool rather than a light switch.
+   */
+  #kindFilter = new Set<string>();
   #showUnattributed = false;
+
+  /**
+   * Only what has been asked for — see #kindFilter.
+   *
+   * The filters are the X-ray panel's, and Inspect has no filter UI to turn any of them on with,
+   * so outside X-ray there is nothing to filter by and everything shows. Sharing the highlight
+   * layer between the two modes is what makes this need saying out loud: an empty filter set means
+   * "nothing selected yet" in X-ray and "not applicable" in Inspect.
+   */
+  #kindShown(kind: string): boolean {
+    return this.#xrayOn ? this.#kindFilter.has(kind) : true;
+  }
 
   /** Usage counts are fetched lazily per node — the manifest should not pay for them. */
   readonly #usageCache = new Map<string, PeekReference[] | 'pending' | 'error'>();
@@ -106,6 +148,12 @@ export class PeekOverlay {
 
     this.#buildChrome();
     this.#bindGlobalEvents();
+
+    // The stylesheet's own resting spot is right/bottom-anchored, so the first paint lands in the
+    // usual corner with no flash. Everything from here on anchors by left instead — see
+    // #anchorPill — so this converts that first position into the equivalent left/top pixels
+    // before anything can grow and need it.
+    this.#anchorPill();
   }
 
   // ------------------------------------------------------------------ chrome
@@ -155,6 +203,10 @@ export class PeekOverlay {
 
     this.#tray = el('div', { class: 'peek-tray', 'aria-hidden': 'true' }, this.#trayInner);
 
+    // The badge and the tray are their own row inside the pill, so the X-ray panel can be a second
+    // row underneath it: one element, one position, one thing to drag.
+    this.#pillRow = el('div', { class: 'peek-pill-row' }, this.#badge, this.#tray);
+
     this.#pill = el(
       'div',
       {
@@ -162,12 +214,11 @@ export class PeekOverlay {
         'data-state': 'dormant',
         'data-active': 'false',
         'data-open': 'false',
-        'data-side': 'right',
+        'data-expanded': 'false',
         role: 'group',
         'aria-label': 'Peek content inspector',
       },
-      this.#badge,
-      this.#tray,
+      this.#pillRow,
     );
 
     this.#badge.addEventListener('click', (event) => {
@@ -176,6 +227,14 @@ export class PeekOverlay {
       // The press that just ended was a drag across the page, not a tap on the icon.
       if (this.#dragMoved) {
         this.#dragMoved = false;
+        return;
+      }
+
+      // Once a mode is running, the tray is its control panel, not a collapsible drawer — closing
+      // it here would hide Inspect/X-ray/Stop with no way back except dragging the mark to reopen
+      // it, and Stop is the only thing that is allowed to end a running mode (see #stopButton).
+      // Dormant is the only time a press on the mark is a plain open/close toggle.
+      if (this.#armed) {
         return;
       }
 
@@ -217,31 +276,132 @@ export class PeekOverlay {
     this.#syncTrayWidth();
   }
 
+  /**
+   * The pill's own border, in pixels — fixed by `.peek-pill`'s `border: 1px solid` and never
+   * overridden by any state, including expanded. It never changes, so it is cheaper to name than to
+   * remeasure every time #syncTrayWidth needs the pill's true target width.
+   */
+  static readonly #PILL_BORDER = 2;
+
   #syncTrayWidth(): void {
+    // Expanded, the row is as wide as the panel below it and the tray just fills what is left of
+    // the row — an explicit pixel width would fight that, and there is nothing to unfurl anyway.
+    if (this.#panel) {
+      this.#tray.style.width = '';
+      return;
+    }
+
     this.#tray.style.width = this.#trayOpen ? `${this.#trayInner.offsetWidth}px` : '0px';
+
+    // Reclamp for the width this is about to animate to (or has just changed to without any
+    // animation at all — Stop or the status label appearing mid-state-change), not whatever the
+    // pill's own rect still says: the tray's width transition, and the pill's position transition
+    // that has to move with it, both start from this same call, and #trayInner is unclipped and
+    // untransitioned so its width is already the real target rather than a value still mid-flight.
+    // Reading the mark and the border directly, rather than the pill's current rect, is what keeps
+    // this correct even when the tray was already open and only its *contents* changed size — the
+    // one case a before/after diff on the pill's own width cannot see coming.
+    const badgeWidth = this.#badge.getBoundingClientRect().width;
+    const trayWidth = this.#trayOpen ? this.#trayInner.offsetWidth : 0;
+    this.#fitPillForWidth(badgeWidth + trayWidth + PeekOverlay.#PILL_BORDER);
   }
 
   /**
-   * Keep the pill anchored to whichever edge it was dropped nearest, and unfurl the tray away from
-   * that edge. Anchoring by `right` on the right-hand side is what keeps the icon still while the
-   * tray grows: anchored by `left`, opening the tray would push the icon sideways instead.
+   * Anchor the pill by its left edge, wherever it was dropped. The mark always leads the row (see
+   * .peek-pill-row in styles.ts) and everything that unfurls — the tray, the panel underneath it —
+   * grows out to its right, never its left, so the left edge is the one fixed point that has to
+   * stay put while that happens.
    */
   #anchorPill(): void {
     const rect = this.#pill.getBoundingClientRect();
-    const onRight = rect.left + rect.width / 2 > window.innerWidth / 2;
 
-    this.#pill.dataset.side = onRight ? 'right' : 'left';
-
-    if (onRight) {
-      this.#pill.style.right = `${Math.round(window.innerWidth - rect.right)}px`;
-      this.#pill.style.left = 'auto';
-    } else {
-      this.#pill.style.left = `${Math.round(rect.left)}px`;
-      this.#pill.style.right = 'auto';
-    }
-
+    this.#pill.style.left = `${Math.round(rect.left)}px`;
+    this.#pill.style.right = 'auto';
     this.#pill.style.top = `${Math.round(rect.top)}px`;
     this.#pill.style.bottom = 'auto';
+  }
+
+  /**
+   * Keep the whole pill — row plus whatever panel is unfurled under it — inside the viewport, on
+   * both axes, every time something might have moved the edges out from under it: a window resize,
+   * a page scroll, or the panel changing size as its content is refiltered.
+   *
+   * The panel grows downwards from a chip that usually sits near the bottom of the page, so on
+   * expanding there is rarely room below it; anchoring by `top` and pulling that up is what keeps
+   * the row and the panel one object, rather than the panel finding its own place on screen — the
+   * detached card this replaced. The same clamp runs on `left` unconditionally, not only while a
+   * panel is open: the mark always leads the row now (see .peek-pill-row in styles.ts) and nothing
+   * unfurls to its left, so a narrowed viewport can just as easily leave the tray with no room to
+   * its right.
+   */
+  #fitPill(): void {
+    const target = this.#foldTarget;
+    this.#fitPillForWidth(
+      target?.width ?? this.#pill.offsetWidth,
+      target?.height ?? this.#pill.offsetHeight,
+    );
+  }
+
+  /**
+   * Animate the pill between two sizes.
+   *
+   * Neither an auto width nor a child that is only now appearing (or about to be removed) animates
+   * on its own, which is why opening X-ray used to snap to full size and closing it used to blink
+   * out. So the pill is pinned to the size it has, that pin is settled as the transition's starting
+   * point, and only then is the target applied — with the pill clipping for the duration, so the
+   * panel is wiped into view rather than jumping into it.
+   */
+  #fold(from: { width: number; height: number }, to: { width: number; height: number }): void {
+    this.#pill.dataset.folding = 'true';
+    this.#pill.style.width = `${Math.round(from.width)}px`;
+    this.#pill.style.height = `${Math.round(from.height)}px`;
+
+    // Settle the pin as the start value, or the browser has nothing to interpolate from and goes
+    // straight to the target.
+    void this.#pill.offsetWidth;
+
+    this.#pill.style.width = `${Math.round(to.width)}px`;
+    this.#pill.style.height = `${Math.round(to.height)}px`;
+    this.#foldTarget = to;
+    this.#foldTimer = window.setTimeout(() => this.#endFold(), FOLD_MS);
+  }
+
+  /** End of a fold: drop the panel it was closing over, and hand sizing back to the content. */
+  #endFold(): void {
+    if (this.#foldTimer !== 0) {
+      clearTimeout(this.#foldTimer);
+      this.#foldTimer = 0;
+    }
+
+    if (!this.#foldTarget) {
+      return;
+    }
+
+    this.#foldTarget = null;
+    this.#foldingPanel?.remove();
+    this.#foldingPanel = null;
+    delete this.#pill.dataset.folding;
+    this.#pill.style.width = '';
+    this.#pill.style.height = '';
+  }
+
+  /**
+   * The guts of #fitPill, taking the size as parameters rather than reading it off the pill. Both
+   * callers that pass them are clamping for a size the pill does not have yet and is animating
+   * towards: #setTrayOpen, before the tray's width transition starts, and #closePanel, before the
+   * panel folds away. Clamping against the size it still has would put it in the wrong place and
+   * then leave it there.
+   */
+  #fitPillForWidth(width: number, height: number = this.#pill.offsetHeight): void {
+    const rect = this.#pill.getBoundingClientRect();
+
+    const top = Math.max(12, Math.min(rect.top, window.innerHeight - height - 12));
+    const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12));
+
+    this.#pill.style.top = `${Math.round(top)}px`;
+    this.#pill.style.bottom = 'auto';
+    this.#pill.style.left = `${Math.round(left)}px`;
+    this.#pill.style.right = 'auto';
   }
 
   /**
@@ -261,8 +421,18 @@ export class PeekOverlay {
     pill.addEventListener('pointerdown', (event) => {
       const target = event.target as HTMLElement;
 
-      // Tray buttons are targets in their own right; a press there is never a drag.
-      if (target.closest?.('.peek-tray')) {
+      // The whole top row is the drag handle — the mark, the gaps around the buttons, the space
+      // the tray pads out. Only things that do something of their own on a press are exempt: a
+      // live button (the mark is one, and it is the original handle, so it stays draggable), and
+      // everything in the panel, where a press is a row click or a swipe of the list.
+      //
+      // Buttons Peek has disabled are not exempt: they take no clicks, and `pointer-events: none`
+      // means the press lands on the tray behind them anyway.
+      const onControl =
+        target.closest?.('.peek-panel') ||
+        (target.closest?.('button, a') && !target.closest?.('.peek-badge'));
+
+      if (onControl) {
         return;
       }
 
@@ -298,6 +468,9 @@ export class PeekOverlay {
         dragging = true;
         this.#dragMoved = true;
         pill.dataset.dragging = 'true';
+
+        // Wherever this ends up is the pill's home now; collapsing must not undo the move.
+        this.#collapsedPosition = null;
       }
 
       const left = Math.min(Math.max(0, event.clientX - offsetX), window.innerWidth - pill.offsetWidth);
@@ -395,30 +568,24 @@ export class PeekOverlay {
     }
   }
 
-  /** Reflects Inspect and X-ray's own on/off state onto their buttons — independent of each other. */
+  /**
+   * Reflects Inspect and X-ray's own on/off state onto their buttons, and disables both of them
+   * once either is running. Mutually exclusive modes have to look that way, not just behave that
+   * way; and Stop is the only thing allowed to end a running mode now (see #stopButton), so the
+   * mode buttons themselves have nothing left to do once one of them is on — pressing the active
+   * one again no longer stops it.
+   */
   #syncButtons(): void {
     this.#inspectButton.setAttribute('aria-pressed', String(this.#inspectOn));
     this.#xrayButton.setAttribute('aria-pressed', String(this.#xrayOn));
+    this.#inspectButton.disabled = this.#armed;
+    this.#xrayButton.disabled = this.#armed;
   }
 
   async toggle(): Promise<void> {
-    if (this.#inspectOn) {
-      this.#inspectOn = false;
-
-      if (this.#xrayOn) {
-        // X-ray still wants the hover engine running; only Inspect's own indicator goes off.
-        this.#syncButtons();
-      } else {
-        this.disarm();
-      }
-
-      return;
-    }
-
     if (this.#armed) {
-      // Already armed because X-ray asked for it; just light up Inspect's own indicator.
-      this.#inspectOn = true;
-      this.#syncButtons();
+      // Only Stop ends a running mode now — the button is disabled for exactly this reason, but
+      // the keyboard shortcut reaches here regardless, so the guard has to live here too.
       return;
     }
 
@@ -448,6 +615,10 @@ export class PeekOverlay {
   disarm(): void {
     this.#pinned = false;
     this.#activeRegion = null;
+
+    // Filters belong to the session that set them; the next X-ray opens on the whole page again.
+    this.#kindFilter.clear();
+    this.#showUnattributed = false;
     this.#inspectOn = false;
     this.#xrayOn = false;
     this.#setState('dormant');
@@ -457,32 +628,20 @@ export class PeekOverlay {
   }
 
   async toggleXray(): Promise<void> {
-    if (this.#xrayOn) {
-      this.#xrayOn = false;
-      this.#closePanel();
-
-      if (this.#inspectOn) {
-        // Inspect is still explicitly on; drop back to its state rather than disarming outright.
-        this.#setState(this.#summary && this.#summary.coverage < LOW_COVERAGE ? 'degraded' : 'armed');
-      } else {
-        this.disarm();
-      }
-
-      this.#renderHighlights();
+    if (this.#armed) {
+      // Only Stop ends a running mode now — see #toggle.
       return;
     }
 
-    if (!this.#armed) {
-      await this.arm();
-      if (this.#state === 'error') {
-        return;
-      }
+    await this.arm();
+    if (this.#state === 'error') {
+      return;
     }
 
     this.#xrayOn = true;
     this.#setState('xray');
     this.#renderHighlights();
-    this.#renderPanel();
+    this.#openPanel();
   }
 
   // ------------------------------------------------------------------ data
@@ -559,14 +718,17 @@ export class PeekOverlay {
 
     for (const region of this.#summary.regions) {
       const primary = region.entries[0];
-      if (this.#hiddenKinds.has(primary.sourceKind)) {
+      if (!this.#kindShown(primary.sourceKind)) {
         continue;
       }
 
       this.#layer.append(this.#highlightFor(region));
     }
 
-    if (this.#state === 'xray' && this.#showUnattributed) {
+    // Keyed off X-ray being on rather than the state being exactly 'xray': pinning a card moves
+    // the state to 'locked', and the filter the user set has no business switching itself off
+    // because they clicked something.
+    if (this.#xrayOn && this.#showUnattributed) {
       for (const element of this.#summary.unattributed) {
         const box = element.getBoundingClientRect();
         if (box.width === 0 && box.height === 0) {
@@ -603,6 +765,10 @@ export class PeekOverlay {
   }
 
   #reposition(): void {
+    // Runs regardless of armed state: the pill sits on screen whether or not Peek is doing
+    // anything, and a resize can just as easily strand a dormant pill off-screen.
+    this.#fitPill();
+
     if (!this.#armed) {
       return;
     }
@@ -739,7 +905,7 @@ export class PeekOverlay {
       return;
     }
 
-    const visible = this.#summary.regions.filter((region) => !this.#hiddenKinds.has(region.entries[0].sourceKind));
+    const visible = this.#summary.regions.filter((region) => this.#kindShown(region.entries[0].sourceKind));
     const index = visible.indexOf(this.#activeRegion);
     if (index < 0) {
       return;
@@ -761,7 +927,7 @@ export class PeekOverlay {
     let bestArea = Number.POSITIVE_INFINITY;
 
     for (const region of this.#summary.regions) {
-      if (this.#hiddenKinds.has(region.entries[0].sourceKind)) {
+      if (!this.#kindShown(region.entries[0].sourceKind)) {
         continue;
       }
 
@@ -1049,19 +1215,104 @@ export class PeekOverlay {
 
   // ------------------------------------------------------------------ x-ray panel
 
-  #closePanel(): void {
-    this.#panel?.remove();
-    this.#panel = null;
-  }
-
-  #renderPanel(): void {
-    this.#closePanel();
-
+  /**
+   * Unfurl the panel out of the pill itself, below the button row, and remember where the pill was
+   * so collapsing can put it back. The panel is a child of the pill on purpose: it inherits the
+   * pill's position, so dragging the mark drags the panel with it.
+   */
+  #openPanel(): void {
     if (!this.#manifest || !this.#summary) {
       return;
     }
 
-    const panel = el('div', { class: 'peek-panel', 'data-peek-ui': 'panel' });
+    if (!this.#panel) {
+      // Re-opening mid-fold: land the previous one first, so its cleanup cannot strip the inline
+      // sizing off the unfold that is about to start.
+      this.#endFold();
+
+      const style = this.#pill.style;
+      this.#collapsedPosition = {
+        top: style.top,
+        bottom: style.bottom,
+        left: style.left,
+        right: style.right,
+      };
+
+      // Measured before the panel goes in: this is the size the unfold starts from.
+      const from = this.#pill.getBoundingClientRect();
+
+      this.#panel = el('div', { class: 'peek-panel', 'data-peek-ui': 'panel' });
+      this.#pill.append(this.#panel);
+      this.#pill.dataset.expanded = 'true';
+
+      // The row is the panel's header now; there is nothing sensible to show with it shut.
+      this.#setTrayOpen(true);
+
+      // Filled before measuring: the height being unfolded to is the height of the real content,
+      // not of an empty box.
+      this.#renderPanel();
+
+      this.#fold(from, { width: this.#pill.offsetWidth, height: this.#pill.offsetHeight });
+      this.#fitPill();
+      return;
+    }
+
+    this.#renderPanel();
+  }
+
+  /** Fold the panel back into the row, rather than dropping it. */
+  #closePanel(): void {
+    const panel = this.#panel;
+    if (!panel) {
+      return;
+    }
+
+    // Land whatever was in flight first, so `from` below is a settled size and not a half-way one.
+    this.#endFold();
+
+    // Shut as far as every other caller is concerned, from here on. It stays in the DOM until the
+    // fold lands, being closed over.
+    this.#panel = null;
+    this.#foldingPanel = panel;
+
+    const from = this.#pill.getBoundingClientRect();
+
+    // Dropped now, not at the end: the row, the tray and the corners all go back to their
+    // unexpanded rules and animate there, and #fold's inline size holds the pill open meanwhile.
+    this.#pill.dataset.expanded = 'false';
+
+    if (this.#collapsedPosition) {
+      const { top, bottom, left, right } = this.#collapsedPosition;
+      this.#pill.style.top = top;
+      this.#pill.style.bottom = bottom;
+      this.#pill.style.left = left;
+      this.#pill.style.right = right;
+      this.#collapsedPosition = null;
+    }
+
+    // The tray goes back to its own measured width before the fold reads the row.
+    this.#syncTrayWidth();
+
+    this.#fold(from, {
+      width:
+        this.#badge.getBoundingClientRect().width +
+        (this.#trayOpen ? this.#trayInner.offsetWidth : 0) +
+        PeekOverlay.#PILL_BORDER,
+      height: this.#pillRow.getBoundingClientRect().height + PeekOverlay.#PILL_BORDER,
+    });
+
+    this.#fitPill();
+  }
+
+  /** Refill the open panel in place — a filter toggle must not move the pill out from under the
+   *  cursor that just pressed it. */
+  #renderPanel(): void {
+    const panel = this.#panel;
+    if (!panel || !this.#manifest || !this.#summary) {
+      return;
+    }
+
+    clear(panel);
 
     panel.append(this.#renderPanelHead());
 
@@ -1077,8 +1328,14 @@ export class PeekOverlay {
       }),
     );
 
-    this.#panel = panel;
-    this.#root.append(panel);
+    // Measured after the browser has laid the new content out, not from the content it replaced —
+    // and only if that content is still up, or a refit queued just before a close would land on
+    // the collapsed pill and undo the position #closePanel just restored.
+    requestAnimationFrame(() => {
+      if (this.#panel === panel) {
+        this.#fitPill();
+      }
+    });
   }
 
   #renderPanelHead(): HTMLElement {
@@ -1120,6 +1377,12 @@ export class PeekOverlay {
 
   #renderChips(): HTMLElement {
     const chips = el('div', { class: 'peek-chips' });
+    const group = el(
+      'div',
+      { class: 'peek-filters' },
+      el('span', { class: 'peek-label', text: 'Filter' }),
+      chips,
+    );
 
     const definitions: Array<[string, string, string]> = [
       ['OwnedProperty', 'owned', 'This page'],
@@ -1135,17 +1398,17 @@ export class PeekOverlay {
           class: 'peek-chip',
           type: 'button',
           'data-tone': tone,
-          'aria-pressed': String(!this.#hiddenKinds.has(kind)),
+          'aria-pressed': String(this.#kindFilter.has(kind)),
         },
         el('i', {}),
         document.createTextNode(label),
       );
 
       chip.addEventListener('click', () => {
-        if (this.#hiddenKinds.has(kind)) {
-          this.#hiddenKinds.delete(kind);
+        if (this.#kindFilter.has(kind)) {
+          this.#kindFilter.delete(kind);
         } else {
-          this.#hiddenKinds.add(kind);
+          this.#kindFilter.add(kind);
         }
 
         this.#renderHighlights();
@@ -1175,7 +1438,7 @@ export class PeekOverlay {
     });
 
     chips.append(unattributed);
-    return chips;
+    return group;
   }
 
   #renderPanelList(): HTMLElement {
@@ -1184,11 +1447,29 @@ export class PeekOverlay {
     const summary = this.#summary!;
 
     const visible = manifest.entries.filter(
-      (entry) => !this.#hiddenKinds.has(entry.sourceKind) && entry.state !== 'Empty',
+      (entry) => this.#kindShown(entry.sourceKind) && entry.state !== 'Empty',
     );
 
-    if (visible.length === 0) {
-      list.append(el('div', { class: 'peek-empty', text: 'Nothing to show with these filters.' }));
+    // Unattributed text is the one filter with nothing behind it in the manifest — it is the text
+    // left over once every entry has been matched, so it is DOM elements rather than entries and
+    // has to be listed from the match summary instead. Without this the chip outlines the page but
+    // the list underneath it stays empty, which reads as the filter having found nothing.
+    const unattributed = this.#showUnattributed ? summary.unattributed : [];
+
+    if (visible.length === 0 && unattributed.length === 0) {
+      // An empty list is the opening state now, not a dead end, so it has to read as one: nothing
+      // is selected because nothing has been asked for yet. Only once something *is* selected does
+      // an empty list mean the page genuinely has none of it.
+      list.append(
+        el('div', {
+          class: 'peek-empty',
+          text:
+            this.#kindFilter.size === 0 && !this.#showUnattributed
+              ? 'Pick a filter above to outline what it covers.'
+              : 'Nothing on this page matches these filters.',
+        }),
+      );
+
       return list;
     }
 
@@ -1202,7 +1483,45 @@ export class PeekOverlay {
       list.append(this.#renderPanelRow(entry, summary.matchedEntryIds.has(entry.id)));
     }
 
+    // Last: whatever Peek could not account for at all.
+    for (const element of unattributed) {
+      list.append(this.#renderUnattributedRow(element));
+    }
+
     return list;
+  }
+
+  /**
+   * A row for text Peek could not trace. There is no property to name and nothing to open in the
+   * backoffice, so it is identified by where it sits in the markup and what it says — enough to go
+   * and find it, which is the whole question being asked of an unattributed row.
+   */
+  #renderUnattributedRow(element: HTMLElement): HTMLElement {
+    const row = el(
+      'button',
+      {
+        class: 'peek-row',
+        type: 'button',
+        'data-kind': 'Unattributed',
+        'data-rendered': 'true',
+      },
+      el('i', {}),
+      el(
+        'div',
+        { class: 'peek-row-main' },
+        el('div', { class: 'peek-row-alias', text: describeElement(element) }),
+        el('div', {
+          class: 'peek-row-note',
+          text: (element.textContent ?? '').replace(/\s+/g, ' ').trim(),
+        }),
+      ),
+    );
+
+    row.addEventListener('click', () => {
+      element.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    });
+
+    return row;
   }
 
   #renderPanelRow(entry: PeekEntry, rendered: boolean): HTMLElement {
@@ -1265,6 +1584,18 @@ export class PeekOverlay {
     this.#root.append(notice);
     setTimeout(() => notice.remove(), 6000);
   }
+}
+
+/** Where an untraceable bit of text lives, in the terms the browser would describe it. */
+function describeElement(element: HTMLElement): string {
+  const tag = element.tagName.toLowerCase();
+
+  if (element.id) {
+    return `${tag}#${element.id}`;
+  }
+
+  const className = element.classList[0];
+  return className ? `${tag}.${className}` : tag;
 }
 
 function boxStyle(box: DOMRect): string {
