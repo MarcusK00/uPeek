@@ -94,8 +94,12 @@ public sealed class PeekCandidateCollector
 
         // A block's own IPublishedElement carries no real name, update date or writer — those only
         // exist on the document that hosts it. Tracking the nearest owning document lets a block's
-        // node borrow that document's metadata instead of showing Umbraco's defaults for it.
+        // node borrow that document's metadata instead of showing Umbraco's defaults for it, and lets
+        // an "edit this field" link open the document (and the property that actually holds the
+        // block) instead of a Library element route that only exists for genuinely standalone
+        // elements.
         private Guid _ownerDocumentKey;
+        private string? _ownerPropertyAlias;
 
         public Walk(PeekCandidateCollector owner, string? culture, string? segment, PeekOptions options)
         {
@@ -136,7 +140,7 @@ public sealed class PeekCandidateCollector
                 return;
             }
 
-            var kind = RegisterNode(element);
+            var kind = RegisterNode(element, sourceKind);
 
             var previousOwner = _ownerDocumentKey;
             if (kind != PeekNodeKind.Element)
@@ -194,7 +198,23 @@ public sealed class PeekCandidateCollector
                         sourceKind,
                         breadcrumb);
 
-                    AddValue(value, context, depth);
+                    // The property alias that actually appears on a document's edit form — captured
+                    // here, at the document itself, so a block several hops further down the walk can
+                    // still say which top-level property on the document it lives in.
+                    var previousPropertyAlias = _ownerPropertyAlias;
+                    if (kind == PeekNodeKind.Document)
+                    {
+                        _ownerPropertyAlias = propertyType.Alias;
+                    }
+
+                    try
+                    {
+                        AddValue(value, context, depth);
+                    }
+                    finally
+                    {
+                        _ownerPropertyAlias = previousPropertyAlias;
+                    }
                 }
             }
             finally
@@ -358,7 +378,7 @@ public sealed class PeekCandidateCollector
 
         private void AddMedia(IPublishedContent media, PropertyContext context, int? index)
         {
-            RegisterNode(media);
+            RegisterNode(media, PeekSourceKind.Media);
 
             string? url = null;
             try
@@ -448,6 +468,17 @@ public sealed class PeekCandidateCollector
                     context.Owner.Key,
                     context.Culture,
                     context.PropertyType.Alias),
+
+                // A block only exists inside its owning document's property value — there is no
+                // standalone "element workspace" route for it. Link to the document (and the
+                // top-level property that actually holds the block) instead of a Library element
+                // route that 404s, or worse, opens an unrelated Library item that happens to share
+                // that key's route shape.
+                PeekNodeKind.Element when context.SourceKind == PeekSourceKind.Block =>
+                    _owner._backofficeUrls.DocumentWorkspace(
+                        _ownerDocumentKey,
+                        context.Culture,
+                        _ownerPropertyAlias),
                 PeekNodeKind.Element => _owner._backofficeUrls.ElementWorkspace(
                     context.Owner.Key,
                     context.Culture,
@@ -459,7 +490,7 @@ public sealed class PeekCandidateCollector
             };
         }
 
-        private PeekNodeKind RegisterNode(IPublishedElement element)
+        private PeekNodeKind RegisterNode(IPublishedElement element, PeekSourceKind sourceKind)
         {
             if (_nodes.TryGetValue(element.Key, out var existing))
             {
@@ -476,11 +507,13 @@ public sealed class PeekCandidateCollector
 
             var (typeName, typeIcon) = LookupContentType(element.ContentType.Key, kind);
 
-            // A block (or any other bare IPublishedElement) is not an IPublishedContent, so it has
-            // no name, update date or writer of its own — Umbraco hands back defaults for those.
-            // Borrow the owning document's instead; that document is the thing someone actually
-            // edited.
-            var owner = kind == PeekNodeKind.Element ? _nodes.GetValueOrDefault(_ownerDocumentKey) : null;
+            // A block is not an IPublishedContent, so it has no name, update date or writer of its
+            // own — Umbraco hands back defaults for those. Borrow the owning document's instead;
+            // that document is the thing someone actually edited. A genuinely standalone Library
+            // element keeps its own values: crediting whichever page happened to pick it would be
+            // wrong.
+            var isBlock = kind == PeekNodeKind.Element && sourceKind == PeekSourceKind.Block;
+            var owner = isBlock ? _nodes.GetValueOrDefault(_ownerDocumentKey) : null;
 
             _nodes[element.Key] = new PeekNodeRef
             {
@@ -498,6 +531,7 @@ public sealed class PeekCandidateCollector
                 {
                     PeekNodeKind.Document => _owner._backofficeUrls.DocumentWorkspace(element.Key, _culture),
                     PeekNodeKind.Media => _owner._backofficeUrls.MediaWorkspace(element.Key),
+                    PeekNodeKind.Element when owner is not null => owner.EditUrl,
                     _ => _owner._backofficeUrls.ElementWorkspace(element.Key, _culture),
                 },
                 PublishState = PublishStateFor(element, kind),
