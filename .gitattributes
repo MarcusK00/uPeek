@@ -1,0 +1,4 @@
+# Matches .editorconfig's end_of_line = crlf. Without this, Git has no opinion on line endings,
+# so a build step that emits LF (e.g. Vite) makes the committed CRLF bundles show as modified
+# on every rebuild even though nothing actually changed.
+* text=auto eol=crlf
