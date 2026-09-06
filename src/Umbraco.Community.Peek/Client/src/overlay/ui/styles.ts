@@ -156,7 +156,7 @@ export const OVERLAY_STYLES = /* css */ `
   grid-area: 1 / 1;
   width: 32px;
   height: auto;
-  transform: translate(0.7px, -1px); /* nudge */
+  transform: translate(0.8px, -1.3px); /* nudge */
   display: block;
   pointer-events: none;
   transition: opacity 160ms ease;
