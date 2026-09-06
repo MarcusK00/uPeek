@@ -298,15 +298,6 @@ export class PeekOverlay {
         dragging = true;
         this.#dragMoved = true;
         pill.dataset.dragging = 'true';
-
-        // Collapse first: the maths below, and #anchorPill afterwards, both assume the pill is no
-        // wider than its icon. Re-measure the grab offset against the collapsed box, otherwise a
-        // pill grabbed by its far edge jumps under the cursor.
-        if (this.#trayOpen) {
-          this.#setTrayOpen(false);
-          const rect = pill.getBoundingClientRect();
-          offsetX = Math.min(event.clientX - rect.left, this.#badge.offsetWidth);
-        }
       }
 
       const left = Math.min(Math.max(0, event.clientX - offsetX), window.innerWidth - pill.offsetWidth);

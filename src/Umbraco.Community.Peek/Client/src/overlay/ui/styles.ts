@@ -24,7 +24,8 @@ export const OVERLAY_STYLES = /* css */ `
   --peek-media: #0f7b6c;
   --peek-media-soft: rgba(15, 123, 108, 0.10);
   --peek-unattributed: #8a8a8a;
-  --peek-warn: #b8320c;
+  --peek-active-border: #283a97;
+  --peek-stop: #b8320c;
 
   --peek-surface: #ffffff;
   --peek-surface-2: #f6f6f8;
@@ -38,7 +39,7 @@ export const OVERLAY_STYLES = /* css */ `
   --peek-pill-surface: #ffffff;
   --peek-pill-border: rgba(20, 20, 40, 0.12);
   --peek-pill-text: #1b1b1f;
-  --peek-pill-text-dim: #62626c;
+  --peek-pill-text-dim: #28395d;
   --peek-pill-hover: #f1f1f5;
 
   --peek-radius: 8px;
@@ -61,7 +62,7 @@ export const OVERLAY_STYLES = /* css */ `
     --peek-border: #3a3a45;
     --peek-text: #f2f2f5;
     --peek-text-dim: #a3a3b0;
-    --peek-owned: #7d8cf0;
+    --peek-owned: #283a97;
     --peek-block: #b98ae4;
     --peek-shared: #e5a43c;
     --peek-media: #4ec5b1;
@@ -129,9 +130,9 @@ export const OVERLAY_STYLES = /* css */ `
 
 .peek-pill[data-state="armed"],
 .peek-pill[data-state="locked"] { border-color: var(--peek-owned); }
-.peek-pill[data-state="xray"]     { border-color: var(--peek-block); }
-.peek-pill[data-state="degraded"] { border-color: var(--peek-warn); }
-.peek-pill[data-state="error"]    { border-color: var(--peek-warn); }
+.peek-pill[data-state="xray"]     { border-color: var(--peek-owned); }
+.peek-pill[data-state="degraded"] { border-color: var(--peek-active-border); }
+.peek-pill[data-state="error"]    { border-color: var(--peek-stop); }
 
 /* ------------------------------------------------ the mark */
 
@@ -155,6 +156,7 @@ export const OVERLAY_STYLES = /* css */ `
   grid-area: 1 / 1;
   width: 32px;
   height: auto;
+  transform: translate(0.7px, -1px); /* nudge */
   display: block;
   pointer-events: none;
   transition: opacity 160ms ease;
@@ -225,8 +227,8 @@ export const OVERLAY_STYLES = /* css */ `
 .peek-tray button:hover { background: var(--peek-pill-hover); color: var(--peek-pill-text); }
 .peek-tray button:focus-visible { outline: 2px solid var(--peek-owned); outline-offset: 1px; }
 .peek-tray button[data-action="toggle"][aria-pressed="true"] { background: var(--peek-owned-soft); color: var(--peek-owned); }
-.peek-tray button[data-action="xray"][aria-pressed="true"]   { background: var(--peek-block-soft); color: var(--peek-block); }
-.peek-tray button[data-action="stop"] { color: var(--peek-warn); }
+.peek-tray button[data-action="xray"][aria-pressed="true"]   { background: var(--peek-owned-soft); color: var(--peek-owned); }
+.peek-tray button[data-action="stop"] { color: var(--peek-stop); }
 .peek-tray button[hidden] { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -316,7 +318,7 @@ export const OVERLAY_STYLES = /* css */ `
 .peek-tag[data-tone="block"]  { background: var(--peek-block-soft); color: var(--peek-block); }
 .peek-tag[data-tone="shared"] { background: var(--peek-shared-soft); color: var(--peek-shared); }
 .peek-tag[data-tone="media"]  { background: var(--peek-media-soft); color: var(--peek-media); }
-.peek-tag[data-tone="warn"]   { background: rgba(184, 50, 12, 0.12); color: var(--peek-warn); }
+.peek-tag[data-tone="warn"]   { background: rgba(184, 50, 12, 0.12); color: var(--peek-stop); }
 .peek-tag[data-tone="quiet"]  { background: var(--peek-surface-2); color: var(--peek-text-dim); }
 
 .peek-actions {
@@ -433,7 +435,7 @@ export const OVERLAY_STYLES = /* css */ `
   background: var(--peek-owned);
 }
 
-.peek-coverage-bar[data-low="true"] i { background: var(--peek-warn); }
+.peek-coverage-bar[data-low="true"] i { background: var(--peek-stop); }
 
 .peek-coverage-label {
   display: flex;
@@ -510,7 +512,7 @@ export const OVERLAY_STYLES = /* css */ `
   white-space: nowrap;
 }
 
-.peek-row-note[data-tone="warn"] { color: var(--peek-warn); font-weight: 600; }
+.peek-row-note[data-tone="warn"] { color: var(--peek-stop); font-weight: 600; }
 
 .peek-panel-foot {
   padding: 8px 13px;
@@ -524,7 +526,7 @@ export const OVERLAY_STYLES = /* css */ `
   padding: 8px 10px;
   border-radius: 6px;
   background: rgba(184, 50, 12, 0.10);
-  color: var(--peek-warn);
+  color: var(--peek-stop);
   font-size: 11.5px;
   font-weight: 600;
 }
