@@ -16,7 +16,7 @@ overlay is just a box around some text.
 | Purple solid | Item inside a Block List or Block Grid | `--peek-block` |
 | Amber solid | Shared content — Library element or picked node | `--peek-shared` |
 | Teal solid | Media | `--peek-media` |
-| Grey dashed | Rendered text the matcher could not attribute | `--peek-unattributed` |
+| Grey hatched | Rendered text the matcher could not attribute | `--peek-unattributed` |
 | `?` badge | Matched, but more than one possible source | `--peek-warn` |
 
 **Amber is the one that earns its keep.** It is not a warning that something is wrong, it is a
@@ -114,9 +114,27 @@ where the user left it. A drag in between cancels that: wherever they put it is 
 The panel contains:
 
 - **Coverage bar**, always shown, honest. "84% of visible text attributed · 6 unattributed."
-- **Filter chips** double as the legend and as toggles. Clicking "Shared" dims everything that is not
-  shared — which is exactly how you answer "show me everything on this page I'd be changing for other
-  pages too."
+- **Filter chips** double as the legend and as filters. Clicking "Shared" outlines what is shared —
+  which is exactly how you answer "show me everything on this page I'd be changing for other pages
+  too." Selected chips fill with the kind they select for, so the row keeps working as the legend
+  while it is being used as a filter.
+
+  **Nothing is selected to begin with, and nothing selected means nothing outlined.** X-ray opens on
+  a bare page and an empty list, and every outline from there is one the user asked for by name.
+  Opening straight into a page covered in boxes answers a question nobody asked yet, and it is
+  picking the filters that makes X-ray a question you ask rather than a light you switch on.
+
+  The filters belong to X-ray. **Inspect shares the same highlight layer but has no filter UI**, so
+  an empty filter set means "nothing selected yet" there and "not applicable" in Inspect — which is
+  why `#kindShown` checks the mode and not just the set. Miss that and Inspect silently stops
+  outlining anything at all.
+- **Unattributed** is the odd one out and has to be built differently: it is what is left over once
+  every entry has been matched, so it is DOM elements rather than manifest entries. It gets rows of
+  its own — the element (`footer#site-footer`) and the text it holds — because a filter that
+  outlines the page but leaves the list empty reads as having found nothing. On the page it is
+  **hatched**, not hairlined: grey is the right colour (it means "Peek cannot say", and it must not
+  borrow one of the four kinds), but a 1px dashed outline on transparent was invisible enough that
+  turning the filter on looked like nothing happening.
 - **Entry list**, rendered first, then the interesting ones: values that exist and did not make it
   into the page, labelled `read, not rendered`. Clicking a row scrolls to and pins it; clicking one
   with nowhere to scroll opens it in the backoffice.

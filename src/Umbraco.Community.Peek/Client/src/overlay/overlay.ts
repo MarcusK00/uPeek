@@ -18,8 +18,8 @@ const LOW_COVERAGE = 0.6;
 /** How far a pointer may travel before a press on the pill counts as a drag, not a click. */
 const DRAG_SLOP = 4;
 
-/** How long the panel takes to fold back into the row. Must match .peek-pill[data-collapsing]. */
-const COLLAPSE_MS = 200;
+/** How long the panel takes to fold in or out of the row. Must match .peek-pill[data-folding]. */
+const FOLD_MS = 240;
 
 /**
  * Resolve a file shipped alongside the bundle in `wwwroot/App_Plugins/Peek`.
@@ -96,18 +96,43 @@ export class PeekOverlay {
   #collapsedPosition: { top: string; bottom: string; left: string; right: string } | null = null;
 
   /**
-   * The panel mid-fold. It is out of #panel the moment the collapse starts — as far as the rest of
-   * the overlay is concerned the panel is already shut — but it stays in the DOM, clipped by the
-   * shrinking pill, until the animation lands. #finishCollapse is what actually removes it.
+   * The size a fold in flight is heading for. Any fit that lands mid-fold — a scroll, a resize, the
+   * panel's own post-render fit — has to clamp against where the pill is going, not the half-way
+   * size it happens to be showing.
    */
-  #collapsingPanel: HTMLDivElement | null = null;
-  #collapseTimer = 0;
+  #foldTarget: { width: number; height: number } | null = null;
+
+  /**
+   * The panel a fold-out is closing over. It is out of #panel the moment the fold starts — as far
+   * as the rest of the overlay is concerned the panel is already shut — but it stays in the DOM,
+   * clipped by the shrinking pill, until the fold lands. #endFold is what actually removes it.
+   */
+  #foldingPanel: HTMLDivElement | null = null;
+  #foldTimer = 0;
 
   #activeRegion: PeekRegion | null = null;
   #pinned = false;
   #candidateIndex = 0;
-  #hiddenKinds = new Set<string>();
+  /**
+   * Which source kinds the user has asked to see. Nothing is selected to begin with, and nothing
+   * selected means nothing shown: X-ray opens on a bare page and every outline is something the
+   * user asked for by name. Opening straight into a page covered in boxes answers a question
+   * nobody asked yet, and it is the filters that make it a tool rather than a light switch.
+   */
+  #kindFilter = new Set<string>();
   #showUnattributed = false;
+
+  /**
+   * Only what has been asked for — see #kindFilter.
+   *
+   * The filters are the X-ray panel's, and Inspect has no filter UI to turn any of them on with,
+   * so outside X-ray there is nothing to filter by and everything shows. Sharing the highlight
+   * layer between the two modes is what makes this need saying out loud: an empty filter set means
+   * "nothing selected yet" in X-ray and "not applicable" in Inspect.
+   */
+  #kindShown(kind: string): boolean {
+    return this.#xrayOn ? this.#kindFilter.has(kind) : true;
+  }
 
   /** Usage counts are fetched lazily per node — the manifest should not pay for them. */
   readonly #usageCache = new Map<string, PeekReference[] | 'pending' | 'error'>();
@@ -310,7 +335,54 @@ export class PeekOverlay {
    * its right.
    */
   #fitPill(): void {
-    this.#fitPillForWidth(this.#pill.offsetWidth);
+    const target = this.#foldTarget;
+    this.#fitPillForWidth(
+      target?.width ?? this.#pill.offsetWidth,
+      target?.height ?? this.#pill.offsetHeight,
+    );
+  }
+
+  /**
+   * Animate the pill between two sizes.
+   *
+   * Neither an auto width nor a child that is only now appearing (or about to be removed) animates
+   * on its own, which is why opening X-ray used to snap to full size and closing it used to blink
+   * out. So the pill is pinned to the size it has, that pin is settled as the transition's starting
+   * point, and only then is the target applied — with the pill clipping for the duration, so the
+   * panel is wiped into view rather than jumping into it.
+   */
+  #fold(from: { width: number; height: number }, to: { width: number; height: number }): void {
+    this.#pill.dataset.folding = 'true';
+    this.#pill.style.width = `${Math.round(from.width)}px`;
+    this.#pill.style.height = `${Math.round(from.height)}px`;
+
+    // Settle the pin as the start value, or the browser has nothing to interpolate from and goes
+    // straight to the target.
+    void this.#pill.offsetWidth;
+
+    this.#pill.style.width = `${Math.round(to.width)}px`;
+    this.#pill.style.height = `${Math.round(to.height)}px`;
+    this.#foldTarget = to;
+    this.#foldTimer = window.setTimeout(() => this.#endFold(), FOLD_MS);
+  }
+
+  /** End of a fold: drop the panel it was closing over, and hand sizing back to the content. */
+  #endFold(): void {
+    if (this.#foldTimer !== 0) {
+      clearTimeout(this.#foldTimer);
+      this.#foldTimer = 0;
+    }
+
+    if (!this.#foldTarget) {
+      return;
+    }
+
+    this.#foldTarget = null;
+    this.#foldingPanel?.remove();
+    this.#foldingPanel = null;
+    delete this.#pill.dataset.folding;
+    this.#pill.style.width = '';
+    this.#pill.style.height = '';
   }
 
   /**
@@ -543,6 +615,10 @@ export class PeekOverlay {
   disarm(): void {
     this.#pinned = false;
     this.#activeRegion = null;
+
+    // Filters belong to the session that set them; the next X-ray opens on the whole page again.
+    this.#kindFilter.clear();
+    this.#showUnattributed = false;
     this.#inspectOn = false;
     this.#xrayOn = false;
     this.#setState('dormant');
@@ -642,14 +718,17 @@ export class PeekOverlay {
 
     for (const region of this.#summary.regions) {
       const primary = region.entries[0];
-      if (this.#hiddenKinds.has(primary.sourceKind)) {
+      if (!this.#kindShown(primary.sourceKind)) {
         continue;
       }
 
       this.#layer.append(this.#highlightFor(region));
     }
 
-    if (this.#state === 'xray' && this.#showUnattributed) {
+    // Keyed off X-ray being on rather than the state being exactly 'xray': pinning a card moves
+    // the state to 'locked', and the filter the user set has no business switching itself off
+    // because they clicked something.
+    if (this.#xrayOn && this.#showUnattributed) {
       for (const element of this.#summary.unattributed) {
         const box = element.getBoundingClientRect();
         if (box.width === 0 && box.height === 0) {
@@ -826,7 +905,7 @@ export class PeekOverlay {
       return;
     }
 
-    const visible = this.#summary.regions.filter((region) => !this.#hiddenKinds.has(region.entries[0].sourceKind));
+    const visible = this.#summary.regions.filter((region) => this.#kindShown(region.entries[0].sourceKind));
     const index = visible.indexOf(this.#activeRegion);
     if (index < 0) {
       return;
@@ -848,7 +927,7 @@ export class PeekOverlay {
     let bestArea = Number.POSITIVE_INFINITY;
 
     for (const region of this.#summary.regions) {
-      if (this.#hiddenKinds.has(region.entries[0].sourceKind)) {
+      if (!this.#kindShown(region.entries[0].sourceKind)) {
         continue;
       }
 
@@ -1147,9 +1226,9 @@ export class PeekOverlay {
     }
 
     if (!this.#panel) {
-      // Re-opening mid-fold: land the previous collapse first, so it cannot strip the inline
-      // sizing off the panel that is about to open.
-      this.#finishCollapse();
+      // Re-opening mid-fold: land the previous one first, so its cleanup cannot strip the inline
+      // sizing off the unfold that is about to start.
+      this.#endFold();
 
       const style = this.#pill.style;
       this.#collapsedPosition = {
@@ -1159,45 +1238,47 @@ export class PeekOverlay {
         right: style.right,
       };
 
+      // Measured before the panel goes in: this is the size the unfold starts from.
+      const from = this.#pill.getBoundingClientRect();
+
       this.#panel = el('div', { class: 'peek-panel', 'data-peek-ui': 'panel' });
       this.#pill.append(this.#panel);
       this.#pill.dataset.expanded = 'true';
 
       // The row is the panel's header now; there is nothing sensible to show with it shut.
       this.#setTrayOpen(true);
+
+      // Filled before measuring: the height being unfolded to is the height of the real content,
+      // not of an empty box.
+      this.#renderPanel();
+
+      this.#fold(from, { width: this.#pill.offsetWidth, height: this.#pill.offsetHeight });
+      this.#fitPill();
+      return;
     }
 
     this.#renderPanel();
   }
 
-  /**
-   * Fold the panel back into the row, rather than dropping it.
-   *
-   * Stopping Inspect contracts, because the only thing changing there is the tray's own animated
-   * width. Stopping X-ray used to just blink out: the panel's height came off a `width: 380px` rule
-   * and a child that was simply removed, and neither `width: auto` nor a removed element animates.
-   * So the pill is pinned to the size it currently has, the panel is left in place to be clipped by
-   * it, and the pill is then animated down to the row's own size — the fold you would have expected
-   * it to do in the first place. #finishCollapse clears up once it lands.
-   */
+  /** Fold the panel back into the row, rather than dropping it. */
   #closePanel(): void {
     const panel = this.#panel;
     if (!panel) {
       return;
     }
 
-    // Shut as far as every other caller is concerned, from here on.
+    // Land whatever was in flight first, so `from` below is a settled size and not a half-way one.
+    this.#endFold();
+
+    // Shut as far as every other caller is concerned, from here on. It stays in the DOM until the
+    // fold lands, being closed over.
     this.#panel = null;
-    this.#collapsingPanel = panel;
+    this.#foldingPanel = panel;
 
     const from = this.#pill.getBoundingClientRect();
-    this.#pill.style.width = `${Math.round(from.width)}px`;
-    this.#pill.style.height = `${Math.round(from.height)}px`;
-    this.#pill.dataset.collapsing = 'true';
 
     // Dropped now, not at the end: the row, the tray and the corners all go back to their
-    // unexpanded rules and animate there, and the inline size above is what holds the pill open
-    // in the meantime.
+    // unexpanded rules and animate there, and #fold's inline size holds the pill open meanwhile.
     this.#pill.dataset.expanded = 'false';
 
     if (this.#collapsedPosition) {
@@ -1209,43 +1290,18 @@ export class PeekOverlay {
       this.#collapsedPosition = null;
     }
 
-    // Settle the frozen size as the transition's starting point before asking for the target one,
-    // or the browser has no start to interpolate from and jumps straight there.
-    void this.#pill.offsetWidth;
-
-    const width =
-      this.#badge.getBoundingClientRect().width +
-      (this.#trayOpen ? this.#trayInner.offsetWidth : 0) +
-      PeekOverlay.#PILL_BORDER;
-    const height = this.#pillRow.getBoundingClientRect().height + PeekOverlay.#PILL_BORDER;
-
-    this.#pill.style.width = `${Math.round(width)}px`;
-    this.#pill.style.height = `${Math.round(height)}px`;
-
-    // The tray goes back to its own measured width; the fit that follows corrects the position for
-    // the size being animated to rather than the one still on screen.
+    // The tray goes back to its own measured width before the fold reads the row.
     this.#syncTrayWidth();
-    this.#fitPillForWidth(width, height);
 
-    this.#collapseTimer = window.setTimeout(() => this.#finishCollapse(), COLLAPSE_MS);
-  }
+    this.#fold(from, {
+      width:
+        this.#badge.getBoundingClientRect().width +
+        (this.#trayOpen ? this.#trayInner.offsetWidth : 0) +
+        PeekOverlay.#PILL_BORDER,
+      height: this.#pillRow.getBoundingClientRect().height + PeekOverlay.#PILL_BORDER,
+    });
 
-  /** End of the fold: drop the panel and hand sizing back to the content. */
-  #finishCollapse(): void {
-    if (this.#collapseTimer !== 0) {
-      clearTimeout(this.#collapseTimer);
-      this.#collapseTimer = 0;
-    }
-
-    if (!this.#collapsingPanel) {
-      return;
-    }
-
-    this.#collapsingPanel.remove();
-    this.#collapsingPanel = null;
-    delete this.#pill.dataset.collapsing;
-    this.#pill.style.width = '';
-    this.#pill.style.height = '';
+    this.#fitPill();
   }
 
   /** Refill the open panel in place — a filter toggle must not move the pill out from under the
@@ -1321,6 +1377,12 @@ export class PeekOverlay {
 
   #renderChips(): HTMLElement {
     const chips = el('div', { class: 'peek-chips' });
+    const group = el(
+      'div',
+      { class: 'peek-filters' },
+      el('span', { class: 'peek-label', text: 'Filter' }),
+      chips,
+    );
 
     const definitions: Array<[string, string, string]> = [
       ['OwnedProperty', 'owned', 'This page'],
@@ -1336,17 +1398,17 @@ export class PeekOverlay {
           class: 'peek-chip',
           type: 'button',
           'data-tone': tone,
-          'aria-pressed': String(!this.#hiddenKinds.has(kind)),
+          'aria-pressed': String(this.#kindFilter.has(kind)),
         },
         el('i', {}),
         document.createTextNode(label),
       );
 
       chip.addEventListener('click', () => {
-        if (this.#hiddenKinds.has(kind)) {
-          this.#hiddenKinds.delete(kind);
+        if (this.#kindFilter.has(kind)) {
+          this.#kindFilter.delete(kind);
         } else {
-          this.#hiddenKinds.add(kind);
+          this.#kindFilter.add(kind);
         }
 
         this.#renderHighlights();
@@ -1376,7 +1438,7 @@ export class PeekOverlay {
     });
 
     chips.append(unattributed);
-    return chips;
+    return group;
   }
 
   #renderPanelList(): HTMLElement {
@@ -1385,11 +1447,29 @@ export class PeekOverlay {
     const summary = this.#summary!;
 
     const visible = manifest.entries.filter(
-      (entry) => !this.#hiddenKinds.has(entry.sourceKind) && entry.state !== 'Empty',
+      (entry) => this.#kindShown(entry.sourceKind) && entry.state !== 'Empty',
     );
 
-    if (visible.length === 0) {
-      list.append(el('div', { class: 'peek-empty', text: 'Nothing to show with these filters.' }));
+    // Unattributed text is the one filter with nothing behind it in the manifest — it is the text
+    // left over once every entry has been matched, so it is DOM elements rather than entries and
+    // has to be listed from the match summary instead. Without this the chip outlines the page but
+    // the list underneath it stays empty, which reads as the filter having found nothing.
+    const unattributed = this.#showUnattributed ? summary.unattributed : [];
+
+    if (visible.length === 0 && unattributed.length === 0) {
+      // An empty list is the opening state now, not a dead end, so it has to read as one: nothing
+      // is selected because nothing has been asked for yet. Only once something *is* selected does
+      // an empty list mean the page genuinely has none of it.
+      list.append(
+        el('div', {
+          class: 'peek-empty',
+          text:
+            this.#kindFilter.size === 0 && !this.#showUnattributed
+              ? 'Pick a filter above to outline what it covers.'
+              : 'Nothing on this page matches these filters.',
+        }),
+      );
+
       return list;
     }
 
@@ -1403,7 +1483,45 @@ export class PeekOverlay {
       list.append(this.#renderPanelRow(entry, summary.matchedEntryIds.has(entry.id)));
     }
 
+    // Last: whatever Peek could not account for at all.
+    for (const element of unattributed) {
+      list.append(this.#renderUnattributedRow(element));
+    }
+
     return list;
+  }
+
+  /**
+   * A row for text Peek could not trace. There is no property to name and nothing to open in the
+   * backoffice, so it is identified by where it sits in the markup and what it says — enough to go
+   * and find it, which is the whole question being asked of an unattributed row.
+   */
+  #renderUnattributedRow(element: HTMLElement): HTMLElement {
+    const row = el(
+      'button',
+      {
+        class: 'peek-row',
+        type: 'button',
+        'data-kind': 'Unattributed',
+        'data-rendered': 'true',
+      },
+      el('i', {}),
+      el(
+        'div',
+        { class: 'peek-row-main' },
+        el('div', { class: 'peek-row-alias', text: describeElement(element) }),
+        el('div', {
+          class: 'peek-row-note',
+          text: (element.textContent ?? '').replace(/\s+/g, ' ').trim(),
+        }),
+      ),
+    );
+
+    row.addEventListener('click', () => {
+      element.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    });
+
+    return row;
   }
 
   #renderPanelRow(entry: PeekEntry, rendered: boolean): HTMLElement {
@@ -1466,6 +1584,18 @@ export class PeekOverlay {
     this.#root.append(notice);
     setTimeout(() => notice.remove(), 6000);
   }
+}
+
+/** Where an untraceable bit of text lives, in the terms the browser would describe it. */
+function describeElement(element: HTMLElement): string {
+  const tag = element.tagName.toLowerCase();
+
+  if (element.id) {
+    return `${tag}#${element.id}`;
+  }
+
+  const className = element.classList[0];
+  return className ? `${tag}.${className}` : tag;
 }
 
 function boxStyle(box: DOMRect): string {

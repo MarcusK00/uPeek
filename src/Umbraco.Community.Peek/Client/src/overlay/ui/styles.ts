@@ -23,7 +23,8 @@ export const OVERLAY_STYLES = /* css */ `
   --peek-shared-soft: rgba(184, 115, 12, 0.12);
   --peek-media: #0f7b6c;
   --peek-media-soft: rgba(15, 123, 108, 0.10);
-  --peek-unattributed: #8a8a8a;
+  --peek-unattributed: #6f6f7d;
+  --peek-unattributed-soft: rgba(111, 111, 125, 0.20);
   --peek-active-border: #283a97;
   --peek-stop: #b8320c;
 
@@ -50,6 +51,7 @@ export const OVERLAY_STYLES = /* css */ `
   --peek-pill-block: #7b3fb5;
   --peek-pill-shared: #b8730c;
   --peek-pill-media: #0f7b6c;
+  --peek-pill-unattributed: #6f6f7d;
 
   --peek-radius: 8px;
   --peek-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
@@ -75,6 +77,11 @@ export const OVERLAY_STYLES = /* css */ `
     --peek-block: #b98ae4;
     --peek-shared: #e5a43c;
     --peek-media: #4ec5b1;
+
+    /* Lighter on a dark page, where the light-ground grey disappears. The panel keeps its own
+       fixed one (--peek-pill-unattributed) because it is always on white. */
+    --peek-unattributed: #b0b0c0;
+    --peek-unattributed-soft: rgba(176, 176, 192, 0.22);
   }
 }
 
@@ -93,7 +100,19 @@ export const OVERLAY_STYLES = /* css */ `
 .peek-highlight[data-kind="Block"]         { outline: 2px solid var(--peek-block); background: var(--peek-block-soft); }
 .peek-highlight[data-kind="Shared"]        { outline: 2px solid var(--peek-shared); background: var(--peek-shared-soft); }
 .peek-highlight[data-kind="Media"]         { outline: 2px solid var(--peek-media); background: var(--peek-media-soft); }
-.peek-highlight[data-kind="Unattributed"]  { outline: 1px dashed var(--peek-unattributed); background: transparent; }
+/* Unattributed is the only highlight with no colour of its own to spend — grey is the point, it
+   means "Peek cannot say". A 1px dashed hairline on transparent was so faint that turning the
+   filter on read as nothing happening, so the region is hatched instead: unmistakably a marked
+   area, still obviously not one of the four kinds, and legible on light and dark pages alike. */
+.peek-highlight[data-kind="Unattributed"] {
+  outline: 2px dashed var(--peek-unattributed);
+  outline-offset: -1px;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--peek-unattributed-soft) 0 5px,
+    transparent 5px 10px
+  );
+}
 
 .peek-highlight[data-dimmed="true"] { opacity: 0.12; }
 
@@ -173,21 +192,23 @@ export const OVERLAY_STYLES = /* css */ `
    explicit top/left on every pointermove, so it has to opt out or the pill lags the cursor. */
 .peek-pill:not([data-dragging="true"]) { transition: top 200ms cubic-bezier(0.2, 0.8, 0.2, 1), left 200ms cubic-bezier(0.2, 0.8, 0.2, 1); }
 
-/* Folding the panel back into the row. The pill is pinned to an explicit size for the duration
-   (see #closePanel) because neither an auto width nor a removed child is animatable, and it clips
-   for the duration too — the panel is still in there, being closed over. Both go away the moment
-   the fold lands, so the mark is never clipped by the corner radius at rest. */
-.peek-pill[data-collapsing="true"] { overflow: hidden; }
+/* The panel folding in or out of the row. The pill is pinned to an explicit size for the duration
+   (see #fold) because neither an auto width nor an appearing/disappearing child is animatable, and
+   it clips for the duration too, so the panel is wiped into and out of view rather than jumping.
+   Both go away the moment the fold lands, so the mark is never clipped by the corner radius at
+   rest. Same timing as the tray, so opening X-ray feels like the same mechanism as opening
+   Inspect rather than a different one. */
+.peek-pill[data-folding="true"] { overflow: hidden; }
 
 /* Grabbing the pill mid-fold: the position has to track the cursor exactly, so the fold gives up
    its animation and lands at once rather than trailing behind the drag. */
-.peek-pill[data-collapsing="true"]:not([data-dragging="true"]) {
+.peek-pill[data-folding="true"]:not([data-dragging="true"]) {
   transition:
-    width 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    height 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    border-radius 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    top 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    left 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    width 240ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    height 240ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    border-radius 240ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    top 240ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    left 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .peek-pill[data-state="armed"],
@@ -509,11 +530,21 @@ export const OVERLAY_STYLES = /* css */ `
   font-family: var(--peek-mono);
 }
 
-.peek-coverage { margin-top: 8px; }
+/* Section captions. Small, upper, tracked — the backoffice labels its groups this way, and it is
+   what turns a stack of controls into a form rather than a dashboard. */
+.peek-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--peek-pill-text-dim);
+}
+
+.peek-coverage { margin-top: 10px; }
 
 .peek-coverage-bar {
-  height: 5px;
-  border-radius: 3px;
+  height: 4px;
+  border-radius: 2px;
   background: var(--peek-pill-surface-2);
   overflow: hidden;
 }
@@ -529,74 +560,110 @@ export const OVERLAY_STYLES = /* css */ `
 .peek-coverage-label {
   display: flex;
   justify-content: space-between;
+  gap: 8px;
   font-size: 11px;
   color: var(--peek-pill-text-dim);
-  margin-top: 4px;
+  margin-top: 5px;
 }
 
-.peek-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
+/* ------------------------------------------------ filters
+
+   Square, bordered, flat-filled when on. The round dot-and-lozenge these replaced said "generic
+   dashboard"; the backoffice's own controls are rectangles with a 3px corner and a solid selected
+   state, and the kind colour reads better as an edge on one than as a bullet beside it.
+
+   Nothing is selected by default and that means unfiltered, not "everything hidden" — so the
+   resting look here has to be plainly interactive rather than switched-off. */
+.peek-filters { margin-top: 11px; }
+.peek-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 
 .peek-chip {
   all: unset;
+  box-sizing: border-box;
   cursor: pointer;
   display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
-  border-radius: 999px;
+  align-items: stretch;
+  gap: 6px;
+  padding: 4px 9px;
   border: 1px solid var(--peek-pill-border);
+  border-radius: 3px;
+  background: var(--peek-pill-surface);
   font-family: var(--peek-font);
   font-size: 11px;
   font-weight: 600;
+  line-height: 1.25;
   color: var(--peek-pill-text);
-  transition: background 120ms ease;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
 .peek-chip:hover { background: var(--peek-pill-hover); }
 .peek-chip:focus-visible { outline: 2px solid var(--peek-pill-owned); outline-offset: 1px; }
-.peek-chip[aria-pressed="false"] { opacity: 0.45; }
-.peek-chip i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+/* The kind colour as an edge down the leading side of the chip. */
+.peek-chip i { width: 3px; border-radius: 1px; flex: none; }
 .peek-chip[data-tone="owned"] i  { background: var(--peek-pill-owned); }
 .peek-chip[data-tone="block"] i  { background: var(--peek-pill-block); }
 .peek-chip[data-tone="shared"] i { background: var(--peek-pill-shared); }
 .peek-chip[data-tone="media"] i  { background: var(--peek-pill-media); }
-.peek-chip[data-tone="unattributed"] i { background: transparent; border: 1px dashed var(--peek-unattributed); }
+.peek-chip[data-tone="unattributed"] i { background: transparent; border-left: 3px dashed var(--peek-pill-unattributed); }
+
+/* Selected filters fill with the kind they select for, so the chip row keeps working as the
+   legend even once it is being used as a filter. */
+.peek-chip[aria-pressed="true"] { color: #fff; }
+.peek-chip[aria-pressed="true"] i { background: rgba(255, 255, 255, 0.9); border-left-color: rgba(255, 255, 255, 0.9); }
+.peek-chip[aria-pressed="true"][data-tone="owned"]  { background: var(--peek-pill-owned); border-color: var(--peek-pill-owned); }
+.peek-chip[aria-pressed="true"][data-tone="block"]  { background: var(--peek-pill-block); border-color: var(--peek-pill-block); }
+.peek-chip[aria-pressed="true"][data-tone="shared"] { background: var(--peek-pill-shared); border-color: var(--peek-pill-shared); }
+.peek-chip[aria-pressed="true"][data-tone="media"]  { background: var(--peek-pill-media); border-color: var(--peek-pill-media); }
+.peek-chip[aria-pressed="true"][data-tone="unattributed"] { background: var(--peek-pill-unattributed); border-color: var(--peek-pill-unattributed); }
 
 .peek-panel-list {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 6px 6px 10px;
+  padding: 2px 0 4px;
 }
 
 /* A <button>, so it needs the same reset the chips get: left alone it paints the UA's grey
-   buttonface, which on the panel's white ground reads as a filled block behind every row. */
+   buttonface, which on the panel's white ground reads as a filled block behind every row.
+
+   Full-bleed and divided rather than a stack of floating rounded cards: this is a list of records,
+   which is what the backoffice draws as a plain table with hairlines between. The kind colour is
+   the same edge the chips use, so the legend reads straight down into the list. */
 .peek-row {
   all: unset;
   box-sizing: border-box;
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  align-items: stretch;
+  gap: 10px;
   width: 100%;
-  padding: 6px 7px;
-  border-radius: 5px;
+  padding: 7px 13px 7px 0;
   cursor: pointer;
-  border: 1px solid transparent;
   text-align: left;
   font-family: var(--peek-font);
   color: var(--peek-pill-text);
+  border-bottom: 1px solid var(--peek-pill-border);
   transition: background 120ms ease;
 }
 
+.peek-row:last-child { border-bottom: none; }
 .peek-row:hover { background: var(--peek-pill-hover); }
-.peek-row:focus-visible { outline: 2px solid var(--peek-pill-owned); outline-offset: -1px; }
-.peek-row i { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex: none; }
+.peek-row:focus-visible { outline: 2px solid var(--peek-pill-owned); outline-offset: -2px; }
+
+.peek-row i { width: 3px; flex: none; }
 .peek-row[data-kind="OwnedProperty"] i { background: var(--peek-pill-owned); }
 .peek-row[data-kind="Block"] i { background: var(--peek-pill-block); }
 .peek-row[data-kind="Shared"] i { background: var(--peek-pill-shared); }
 .peek-row[data-kind="Media"] i { background: var(--peek-pill-media); }
-.peek-row[data-rendered="false"] i { background: transparent; border: 1px dashed var(--peek-unattributed); }
+.peek-row[data-rendered="false"] i { background: repeating-linear-gradient(180deg, var(--peek-pill-unattributed) 0 3px, transparent 3px 6px); }
+
+/* Rows for text with no entry behind it at all — hatched down the edge, like the region on the page. */
+.peek-row[data-kind="Unattributed"] i {
+  background: repeating-linear-gradient(135deg, var(--peek-pill-unattributed) 0 3px, transparent 3px 6px);
+}
+
+.peek-row[data-kind="Unattributed"] .peek-row-alias { color: var(--peek-pill-text-dim); }
 
 .peek-row-main { min-width: 0; flex: 1; }
 
