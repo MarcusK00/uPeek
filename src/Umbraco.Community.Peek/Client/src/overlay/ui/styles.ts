@@ -138,6 +138,10 @@ export const OVERLAY_STYLES = /* css */ `
   display: flex;
   align-items: center;
   flex: none;
+
+  /* The whole row drags, not just the mark, so the browser must not claim a touch here as a
+     page scroll. The panel below is outside this row and still scrolls normally. */
+  touch-action: none;
 }
 
 /* The mark always leads the row and everything else — the tray, the panel underneath it — always
@@ -168,6 +172,23 @@ export const OVERLAY_STYLES = /* css */ `
    never runs off the right edge — rather than teleporting there; animate both. A drag writes an
    explicit top/left on every pointermove, so it has to opt out or the pill lags the cursor. */
 .peek-pill:not([data-dragging="true"]) { transition: top 200ms cubic-bezier(0.2, 0.8, 0.2, 1), left 200ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+
+/* Folding the panel back into the row. The pill is pinned to an explicit size for the duration
+   (see #closePanel) because neither an auto width nor a removed child is animatable, and it clips
+   for the duration too — the panel is still in there, being closed over. Both go away the moment
+   the fold lands, so the mark is never clipped by the corner radius at rest. */
+.peek-pill[data-collapsing="true"] { overflow: hidden; }
+
+/* Grabbing the pill mid-fold: the position has to track the cursor exactly, so the fold gives up
+   its animation and lands at once rather than trailing behind the drag. */
+.peek-pill[data-collapsing="true"]:not([data-dragging="true"]) {
+  transition:
+    width 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    height 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    border-radius 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    top 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    left 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
 
 .peek-pill[data-state="armed"],
 .peek-pill[data-state="locked"] { border-color: var(--peek-owned); }
@@ -279,11 +300,21 @@ export const OVERLAY_STYLES = /* css */ `
 .peek-tray button[data-action="stop"] { color: var(--peek-stop); }
 .peek-tray button[hidden] { display: none; }
 
-/* Inspect and X-ray are mutually exclusive: whichever isn't running reads as unavailable, not just
-   inert, so a press that does nothing doesn't look like a bug. */
-.peek-tray button:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
+/* While a mode runs, both mode buttons stop taking presses — only Stop ends it. The two say so
+   differently, because they mean different things:
+
+   The mode that is NOT running is unavailable, and dims to say so.
+
+   The mode that IS running is the answer to "what is Peek doing right now", so it must stay fully
+   legible — dimming the one thing the user is looking for to tell them they cannot press it is the
+   wrong trade. It keeps its lit fill and takes a ring in the same colour, which reads as a status
+   light rather than a button, and drops the pointer cursor so nothing invites a press. */
+.peek-tray button:disabled { cursor: default; pointer-events: none; }
+.peek-tray button:disabled[aria-pressed="false"] { opacity: 0.35; }
+.peek-tray button:disabled[aria-pressed="true"] { box-shadow: inset 0 0 0 1px var(--peek-owned); }
 
 @media (prefers-reduced-motion: reduce) {
+  .peek-pill,
   .peek-tray,
   .peek-tray-inner,
   .peek-pill .peek-mark { transition-duration: 0ms; }

@@ -18,6 +18,9 @@ const LOW_COVERAGE = 0.6;
 /** How far a pointer may travel before a press on the pill counts as a drag, not a click. */
 const DRAG_SLOP = 4;
 
+/** How long the panel takes to fold back into the row. Must match .peek-pill[data-collapsing]. */
+const COLLAPSE_MS = 200;
+
 /**
  * Resolve a file shipped alongside the bundle in `wwwroot/App_Plugins/Peek`.
  *
@@ -91,6 +94,14 @@ export class PeekOverlay {
    * unless they moved it in the meantime — a drag clears this.
    */
   #collapsedPosition: { top: string; bottom: string; left: string; right: string } | null = null;
+
+  /**
+   * The panel mid-fold. It is out of #panel the moment the collapse starts — as far as the rest of
+   * the overlay is concerned the panel is already shut — but it stays in the DOM, clipped by the
+   * shrinking pill, until the animation lands. #finishCollapse is what actually removes it.
+   */
+  #collapsingPanel: HTMLDivElement | null = null;
+  #collapseTimer = 0;
 
   #activeRegion: PeekRegion | null = null;
   #pinned = false;
@@ -303,13 +314,13 @@ export class PeekOverlay {
   }
 
   /**
-   * The horizontal half of #fitPill, taking the width as a parameter rather than reading it off the
-   * pill: the one caller that cares about a width the pill does not have yet — #setTrayOpen, just
-   * before the tray's own width transition starts — needs to clamp for where the tray is headed, not
-   * where the badge alone currently ends.
+   * The guts of #fitPill, taking the size as parameters rather than reading it off the pill. Both
+   * callers that pass them are clamping for a size the pill does not have yet and is animating
+   * towards: #setTrayOpen, before the tray's width transition starts, and #closePanel, before the
+   * panel folds away. Clamping against the size it still has would put it in the wrong place and
+   * then leave it there.
    */
-  #fitPillForWidth(width: number): void {
-    const height = this.#pill.offsetHeight;
+  #fitPillForWidth(width: number, height: number = this.#pill.offsetHeight): void {
     const rect = this.#pill.getBoundingClientRect();
 
     const top = Math.max(12, Math.min(rect.top, window.innerHeight - height - 12));
@@ -338,10 +349,18 @@ export class PeekOverlay {
     pill.addEventListener('pointerdown', (event) => {
       const target = event.target as HTMLElement;
 
-      // Tray buttons and everything in the panel are targets in their own right; a press there is
-      // never a drag. Without the panel in this list, dragging its scrollbar or swiping its list
-      // would haul the whole pill across the page instead.
-      if (target.closest?.('.peek-tray, .peek-panel')) {
+      // The whole top row is the drag handle — the mark, the gaps around the buttons, the space
+      // the tray pads out. Only things that do something of their own on a press are exempt: a
+      // live button (the mark is one, and it is the original handle, so it stays draggable), and
+      // everything in the panel, where a press is a row click or a swipe of the list.
+      //
+      // Buttons Peek has disabled are not exempt: they take no clicks, and `pointer-events: none`
+      // means the press lands on the tray behind them anyway.
+      const onControl =
+        target.closest?.('.peek-panel') ||
+        (target.closest?.('button, a') && !target.closest?.('.peek-badge'));
+
+      if (onControl) {
         return;
       }
 
@@ -1128,6 +1147,10 @@ export class PeekOverlay {
     }
 
     if (!this.#panel) {
+      // Re-opening mid-fold: land the previous collapse first, so it cannot strip the inline
+      // sizing off the panel that is about to open.
+      this.#finishCollapse();
+
       const style = this.#pill.style;
       this.#collapsedPosition = {
         top: style.top,
@@ -1147,13 +1170,34 @@ export class PeekOverlay {
     this.#renderPanel();
   }
 
+  /**
+   * Fold the panel back into the row, rather than dropping it.
+   *
+   * Stopping Inspect contracts, because the only thing changing there is the tray's own animated
+   * width. Stopping X-ray used to just blink out: the panel's height came off a `width: 380px` rule
+   * and a child that was simply removed, and neither `width: auto` nor a removed element animates.
+   * So the pill is pinned to the size it currently has, the panel is left in place to be clipped by
+   * it, and the pill is then animated down to the row's own size — the fold you would have expected
+   * it to do in the first place. #finishCollapse clears up once it lands.
+   */
   #closePanel(): void {
-    if (!this.#panel) {
+    const panel = this.#panel;
+    if (!panel) {
       return;
     }
 
-    this.#panel.remove();
+    // Shut as far as every other caller is concerned, from here on.
     this.#panel = null;
+    this.#collapsingPanel = panel;
+
+    const from = this.#pill.getBoundingClientRect();
+    this.#pill.style.width = `${Math.round(from.width)}px`;
+    this.#pill.style.height = `${Math.round(from.height)}px`;
+    this.#pill.dataset.collapsing = 'true';
+
+    // Dropped now, not at the end: the row, the tray and the corners all go back to their
+    // unexpanded rules and animate there, and the inline size above is what holds the pill open
+    // in the meantime.
     this.#pill.dataset.expanded = 'false';
 
     if (this.#collapsedPosition) {
@@ -1165,7 +1209,43 @@ export class PeekOverlay {
       this.#collapsedPosition = null;
     }
 
+    // Settle the frozen size as the transition's starting point before asking for the target one,
+    // or the browser has no start to interpolate from and jumps straight there.
+    void this.#pill.offsetWidth;
+
+    const width =
+      this.#badge.getBoundingClientRect().width +
+      (this.#trayOpen ? this.#trayInner.offsetWidth : 0) +
+      PeekOverlay.#PILL_BORDER;
+    const height = this.#pillRow.getBoundingClientRect().height + PeekOverlay.#PILL_BORDER;
+
+    this.#pill.style.width = `${Math.round(width)}px`;
+    this.#pill.style.height = `${Math.round(height)}px`;
+
+    // The tray goes back to its own measured width; the fit that follows corrects the position for
+    // the size being animated to rather than the one still on screen.
     this.#syncTrayWidth();
+    this.#fitPillForWidth(width, height);
+
+    this.#collapseTimer = window.setTimeout(() => this.#finishCollapse(), COLLAPSE_MS);
+  }
+
+  /** End of the fold: drop the panel and hand sizing back to the content. */
+  #finishCollapse(): void {
+    if (this.#collapseTimer !== 0) {
+      clearTimeout(this.#collapseTimer);
+      this.#collapseTimer = 0;
+    }
+
+    if (!this.#collapsingPanel) {
+      return;
+    }
+
+    this.#collapsingPanel.remove();
+    this.#collapsingPanel = null;
+    delete this.#pill.dataset.collapsing;
+    this.#pill.style.width = '';
+    this.#pill.style.height = '';
   }
 
   /** Refill the open panel in place — a filter toggle must not move the pill out from under the
