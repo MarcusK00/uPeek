@@ -35,7 +35,10 @@ backoffice theme rather than importing a second design system.
 
 ### The pill — implemented
 
-Bottom-right, draggable (it *will* end up on top of somebody's chat widget), six states:
+Bottom-right, draggable (it *will* end up on top of somebody's chat widget), six states. The mark
+always leads and everything else — the tray, the X-ray panel — always unfurls to its right, never
+its left, regardless of which edge of the viewport it was dropped near; the pill's own left edge is
+the fixed point everything grows from, and it slides left as needed to keep the growth on screen.
 
 | State | Label | Meaning |
 | --- | --- | --- |

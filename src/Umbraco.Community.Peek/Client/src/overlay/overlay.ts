@@ -114,6 +114,12 @@ export class PeekOverlay {
 
     this.#buildChrome();
     this.#bindGlobalEvents();
+
+    // The stylesheet's own resting spot is right/bottom-anchored, so the first paint lands in the
+    // usual corner with no flash. Everything from here on anchors by left instead — see
+    // #anchorPill — so this converts that first position into the equivalent left/top pixels
+    // before anything can grow and need it.
+    this.#anchorPill();
   }
 
   // ------------------------------------------------------------------ chrome
@@ -175,7 +181,6 @@ export class PeekOverlay {
         'data-active': 'false',
         'data-open': 'false',
         'data-expanded': 'false',
-        'data-side': 'right',
         role: 'group',
         'aria-label': 'Peek content inspector',
       },
@@ -226,6 +231,21 @@ export class PeekOverlay {
     this.#pill.dataset.open = String(open);
     this.#badge.setAttribute('aria-expanded', String(open));
     this.#tray.setAttribute('aria-hidden', String(!open));
+
+    // Pre-clamp for the width the tray is about to animate to, not the width it has right now:
+    // the mark always leads the row and nothing unfurls to its left, so a mark sitting near the
+    // right edge (its usual resting spot) has to slide left in step with the tray opening, or the
+    // buttons animate straight off the edge of the screen. #trayInner is unclipped and untransitioned
+    // itself, so its width is exactly the tray's target — reading it here does not have to wait for
+    // the tray's own width transition to finish. The panel governs its own width instead (see
+    // #openPanel), so this only applies while it is shut.
+    if (!this.#panel) {
+      const current = this.#pill.getBoundingClientRect().width;
+      const trayWidth = this.#trayInner.offsetWidth;
+      const future = open ? current + trayWidth : current - trayWidth;
+      this.#fitPillForWidth(future);
+    }
+
     this.#syncTrayWidth();
   }
 
@@ -241,43 +261,54 @@ export class PeekOverlay {
   }
 
   /**
-   * Keep the pill anchored to whichever edge it was dropped nearest, and unfurl the tray away from
-   * that edge. Anchoring by `right` on the right-hand side is what keeps the icon still while the
-   * tray grows: anchored by `left`, opening the tray would push the icon sideways instead.
+   * Anchor the pill by its left edge, wherever it was dropped. The mark always leads the row (see
+   * .peek-pill-row in styles.ts) and everything that unfurls — the tray, the panel underneath it —
+   * grows out to its right, never its left, so the left edge is the one fixed point that has to
+   * stay put while that happens.
    */
   #anchorPill(): void {
     const rect = this.#pill.getBoundingClientRect();
-    const onRight = rect.left + rect.width / 2 > window.innerWidth / 2;
 
-    this.#pill.dataset.side = onRight ? 'right' : 'left';
-
-    if (onRight) {
-      this.#pill.style.right = `${Math.round(window.innerWidth - rect.right)}px`;
-      this.#pill.style.left = 'auto';
-    } else {
-      this.#pill.style.left = `${Math.round(rect.left)}px`;
-      this.#pill.style.right = 'auto';
-    }
-
+    this.#pill.style.left = `${Math.round(rect.left)}px`;
+    this.#pill.style.right = 'auto';
     this.#pill.style.top = `${Math.round(rect.top)}px`;
     this.#pill.style.bottom = 'auto';
   }
 
   /**
-   * Keep the whole pill — row plus whatever panel is unfurled under it — inside the viewport.
+   * Keep the whole pill — row plus whatever panel is unfurled under it — inside the viewport, on
+   * both axes, every time something might have moved the edges out from under it: a window resize,
+   * a page scroll, or the panel changing size as its content is refiltered.
    *
    * The panel grows downwards from a chip that usually sits near the bottom of the page, so on
-   * expanding there is rarely room below it. Anchoring by `top` and pulling that top up is what
-   * keeps the row and the panel one object: the alternative, letting the panel find its own place
-   * on screen, is the detached card this replaced.
+   * expanding there is rarely room below it; anchoring by `top` and pulling that up is what keeps
+   * the row and the panel one object, rather than the panel finding its own place on screen — the
+   * detached card this replaced. The same clamp runs on `left` unconditionally, not only while a
+   * panel is open: the mark always leads the row now (see .peek-pill-row in styles.ts) and nothing
+   * unfurls to its left, so a narrowed viewport can just as easily leave the tray with no room to
+   * its right.
    */
   #fitPill(): void {
+    this.#fitPillForWidth(this.#pill.offsetWidth);
+  }
+
+  /**
+   * The horizontal half of #fitPill, taking the width as a parameter rather than reading it off the
+   * pill: the one caller that cares about a width the pill does not have yet — #setTrayOpen, just
+   * before the tray's own width transition starts — needs to clamp for where the tray is headed, not
+   * where the badge alone currently ends.
+   */
+  #fitPillForWidth(width: number): void {
     const height = this.#pill.offsetHeight;
     const rect = this.#pill.getBoundingClientRect();
+
     const top = Math.max(12, Math.min(rect.top, window.innerHeight - height - 12));
+    const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12));
 
     this.#pill.style.top = `${Math.round(top)}px`;
     this.#pill.style.bottom = 'auto';
+    this.#pill.style.left = `${Math.round(left)}px`;
+    this.#pill.style.right = 'auto';
   }
 
   /**
@@ -647,15 +678,15 @@ export class PeekOverlay {
   }
 
   #reposition(): void {
+    // Runs regardless of armed state: the pill sits on screen whether or not Peek is doing
+    // anything, and a resize can just as easily strand a dormant pill off-screen.
+    this.#fitPill();
+
     if (!this.#armed) {
       return;
     }
 
     this.#renderHighlights();
-
-    if (this.#panel) {
-      this.#fitPill();
-    }
 
     if (this.#activeRegion) {
       this.#positionCard(this.#activeRegion);

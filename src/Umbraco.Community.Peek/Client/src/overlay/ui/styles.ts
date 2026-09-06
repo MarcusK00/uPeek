@@ -140,9 +140,11 @@ export const OVERLAY_STYLES = /* css */ `
   flex: none;
 }
 
-/* Dropped on the right of the viewport, the tray has to unfurl to the left of the mark. */
-.peek-pill[data-side="right"] .peek-pill-row { flex-direction: row-reverse; }
-.peek-pill[data-side="left"]  .peek-pill-row { flex-direction: row; }
+/* The mark always leads the row and everything else — the tray, the panel underneath it — always
+   unfurls to its right, regardless of which edge of the viewport the pill was dropped near. The
+   pill's own left edge stays fixed while it grows (see #anchorPill / #openPanel / #fitPill), so
+   nothing here should reverse that and have content spill out to the mark's left instead. */
+.peek-pill-row { flex-direction: row; }
 
 /* Expanded, the pill is the panel: the same chip, grown downwards. The row end stays fully round so
    it still reads as the pill it was; the foot relaxes to a card corner, because 22px on a 300px-tall
@@ -162,9 +164,10 @@ export const OVERLAY_STYLES = /* css */ `
   overflow: hidden;
 }
 
-/* Expanding pulls the pill up the page to make room; animate that rather than teleport. A drag
-   writes an explicit top on every pointermove, so it has to opt out or the pill lags the cursor. */
-.peek-pill:not([data-dragging="true"]) { transition: top 200ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+/* Expanding pulls the pill up the page — and, if it has to, left to right its own width so growth
+   never runs off the right edge — rather than teleporting there; animate both. A drag writes an
+   explicit top/left on every pointermove, so it has to opt out or the pill lags the cursor. */
+.peek-pill:not([data-dragging="true"]) { transition: top 200ms cubic-bezier(0.2, 0.8, 0.2, 1), left 200ms cubic-bezier(0.2, 0.8, 0.2, 1); }
 
 .peek-pill[data-state="armed"],
 .peek-pill[data-state="locked"] { border-color: var(--peek-owned); }
@@ -192,9 +195,9 @@ export const OVERLAY_STYLES = /* css */ `
 
 .peek-pill .peek-mark {
   grid-area: 1 / 1;
-  width: 32px;
+  width: 28px;
   height: auto;
-  transform: translate(0.8px, -1.3px); /* nudge */
+  transform: translate(0.7px, -1.1px); /* nudge */
   display: block;
   pointer-events: none;
   transition: opacity 160ms ease;
@@ -233,8 +236,7 @@ export const OVERLAY_STYLES = /* css */ `
 .peek-pill[data-open="true"] .peek-tray-inner { opacity: 1; transition-delay: 70ms; }
 
 /* A hairline where the tray meets the mark, on whichever side the tray unfurled. */
-.peek-pill[data-side="right"] .peek-tray-inner { border-right: 1px solid var(--peek-pill-border); padding-left: 10px; }
-.peek-pill[data-side="left"]  .peek-tray-inner { border-left: 1px solid var(--peek-pill-border); padding-right: 10px; }
+.peek-tray-inner { border-left: 1px solid var(--peek-pill-border); padding-right: 10px; }
 
 /* Expanded, the row is as wide as the panel, so the tray takes whatever the mark leaves. Inspect
    and X-ray stay where they have always been, next to the mark; only Stop is pushed out to the far
@@ -242,11 +244,7 @@ export const OVERLAY_STYLES = /* css */ `
    them where the cursor is already working. */
 .peek-pill[data-expanded="true"] .peek-tray { flex: 1 1 auto; width: auto; overflow: visible; }
 .peek-pill[data-expanded="true"] .peek-tray-inner { width: 100%; }
-.peek-pill[data-expanded="true"][data-side="left"] .peek-tray button[data-action="stop"] { margin-left: auto; }
-
-/* Anchored right the row is reversed, so the far end is the left one: send Stop to the head of the
-   tray and let the auto margin do the pushing from that side instead. */
-.peek-pill[data-expanded="true"][data-side="right"] .peek-tray button[data-action="stop"] { order: -1; margin-right: auto; }
+.peek-pill[data-expanded="true"] .peek-tray button[data-action="stop"] { margin-left: auto; }
 
 .peek-tray .peek-status {
   font-family: var(--peek-font);
