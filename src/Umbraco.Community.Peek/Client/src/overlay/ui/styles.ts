@@ -24,7 +24,8 @@ export const OVERLAY_STYLES = /* css */ `
   --peek-media: #0f7b6c;
   --peek-media-soft: rgba(15, 123, 108, 0.10);
   --peek-unattributed: #8a8a8a;
-  --peek-warn: #b8320c;
+  --peek-active-border: #283a97;
+  --peek-stop: #b8320c;
 
   --peek-surface: #ffffff;
   --peek-surface-2: #f6f6f8;
@@ -32,6 +33,14 @@ export const OVERLAY_STYLES = /* css */ `
   --peek-text: #1b1b1f;
   --peek-text-dim: #62626c;
   --peek-shadow: 0 6px 28px rgba(15, 15, 30, 0.18), 0 1px 3px rgba(15, 15, 30, 0.12);
+
+  /* The pill is a fixed white chip in both schemes. It carries the Peek mark, which is drawn for a
+     light ground, so a dark-mode surface behind it would leave the mark floating on its own halo. */
+  --peek-pill-surface: #ffffff;
+  --peek-pill-border: rgba(20, 20, 40, 0.12);
+  --peek-pill-text: #1b1b1f;
+  --peek-pill-text-dim: #28395d;
+  --peek-pill-hover: #f1f1f5;
 
   --peek-radius: 8px;
   --peek-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
@@ -53,7 +62,7 @@ export const OVERLAY_STYLES = /* css */ `
     --peek-border: #3a3a45;
     --peek-text: #f2f2f5;
     --peek-text-dim: #a3a3b0;
-    --peek-owned: #7d8cf0;
+    --peek-owned: #283a97;
     --peek-block: #b98ae4;
     --peek-shared: #e5a43c;
     --peek-media: #4ec5b1;
@@ -94,7 +103,10 @@ export const OVERLAY_STYLES = /* css */ `
   text-align: center;
 }
 
-/* ---------------------------------------------------------------- pill */
+/* ---------------------------------------------------------------- pill
+
+   At rest the pill is the Peek mark and nothing else. Pressing it unfurls a tray of actions out of
+   whichever side faces into the page, so the mark itself never moves — see #anchorPill. */
 
 .peek-pill {
   position: absolute;
@@ -102,53 +114,129 @@ export const OVERLAY_STYLES = /* css */ `
   bottom: 20px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 14px 8px 10px;
-  background: var(--peek-surface);
-  border: 1px solid var(--peek-border);
-  border-radius: 999px;
+  background: var(--peek-pill-surface);
+  border: 1px solid var(--peek-pill-border);
+  border-radius: 20px;
   box-shadow: var(--peek-shadow);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: grab;
+  color: var(--peek-pill-text);
   pointer-events: auto;
   user-select: none;
+  -webkit-user-select: none;
 }
 
-.peek-pill[data-dragging="true"] { cursor: grabbing; }
-.peek-pill[data-state="armed"]   { border-color: var(--peek-owned); }
-.peek-pill[data-state="xray"]    { border-color: var(--peek-block); }
-.peek-pill[data-state="degraded"]{ border-color: var(--peek-warn); }
+/* Dropped on the right of the viewport, the tray has to unfurl to the left of the mark. */
+.peek-pill[data-side="right"] { flex-direction: row-reverse; }
+.peek-pill[data-side="left"]  { flex-direction: row; }
 
-.peek-pill .peek-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--peek-text-dim);
-  flex: none;
-}
+.peek-pill[data-state="armed"],
+.peek-pill[data-state="locked"] { border-color: var(--peek-owned); }
+.peek-pill[data-state="xray"]     { border-color: var(--peek-owned); }
+.peek-pill[data-state="degraded"] { border-color: var(--peek-active-border); }
+.peek-pill[data-state="error"]    { border-color: var(--peek-stop); }
 
-.peek-pill[data-state="armed"] .peek-dot { background: var(--peek-owned); box-shadow: 0 0 0 3px var(--peek-owned-soft); }
-.peek-pill[data-state="locked"] .peek-dot { background: var(--peek-owned); }
-.peek-pill[data-state="xray"] .peek-dot  { background: var(--peek-block); box-shadow: 0 0 0 3px var(--peek-block-soft); }
-.peek-pill[data-state="loading"] .peek-dot { background: var(--peek-owned); animation: peek-pulse 900ms ease-in-out infinite; }
-.peek-pill[data-state="degraded"] .peek-dot { background: var(--peek-warn); }
+/* ------------------------------------------------ the mark */
 
-@keyframes peek-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
-
-.peek-pill button {
+.peek-pill .peek-badge {
   all: unset;
-  cursor: pointer;
-  padding: 2px 6px;
-  border-radius: 4px;
+  box-sizing: border-box;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.peek-pill[data-dragging="true"] .peek-badge { cursor: grabbing; }
+.peek-pill .peek-badge:focus-visible { outline: 2px solid var(--peek-owned); outline-offset: 2px; }
+
+.peek-pill .peek-mark {
+  grid-area: 1 / 1;
+  width: 32px;
+  height: auto;
+  transform: translate(0.8px, -1.3px); /* nudge */
+  display: block;
+  pointer-events: none;
+  transition: opacity 160ms ease;
+}
+
+/* Both marks are in the DOM so the swap is a cross-fade, not a network round trip. */
+.peek-pill .peek-mark[data-variant="active"] { opacity: 0; }
+.peek-pill[data-active="true"] .peek-mark[data-variant="idle"]   { opacity: 0; }
+.peek-pill[data-active="true"] .peek-mark[data-variant="active"] { opacity: 1; }
+
+.peek-pill[data-state="loading"] .peek-mark { animation: peek-pulse 900ms ease-in-out infinite; }
+
+@keyframes peek-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+/* ------------------------------------------------ the tray */
+
+.peek-tray {
+  width: 0;
+  overflow: hidden;
+  transition: width 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.peek-tray-inner {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+
+  /* max-content, so the row keeps its natural width no matter what the clipping tray is animating
+     to. This is the width #syncTrayWidth measures. */
+  width: max-content;
+  padding: 0 6px;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.peek-pill[data-open="true"] .peek-tray-inner { opacity: 1; transition-delay: 70ms; }
+
+/* A hairline where the tray meets the mark, on whichever side the tray unfurled. */
+.peek-pill[data-side="right"] .peek-tray-inner { border-right: 1px solid var(--peek-pill-border); padding-left: 10px; }
+.peek-pill[data-side="left"]  .peek-tray-inner { border-left: 1px solid var(--peek-pill-border); padding-right: 10px; }
+
+.peek-tray .peek-status {
+  font-family: var(--peek-font);
   font-size: 11px;
   font-weight: 600;
-  color: var(--peek-text-dim);
+  color: var(--peek-pill-text-dim);
+  white-space: nowrap;
+  padding: 0 4px;
 }
 
-.peek-pill button:hover { background: var(--peek-surface-2); color: var(--peek-text); }
-.peek-pill button[aria-pressed="true"] { background: var(--peek-block-soft); color: var(--peek-block); }
-.peek-pill button[hidden] { display: none; }
+.peek-tray .peek-status[hidden] { display: none; }
+
+.peek-tray button {
+  all: unset;
+  cursor: pointer;
+  flex: none;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-family: var(--peek-font);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: var(--peek-pill-text-dim);
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.peek-tray button:hover { background: var(--peek-pill-hover); color: var(--peek-pill-text); }
+.peek-tray button:focus-visible { outline: 2px solid var(--peek-owned); outline-offset: 1px; }
+.peek-tray button[data-action="toggle"][aria-pressed="true"] { background: var(--peek-owned-soft); color: var(--peek-owned); }
+.peek-tray button[data-action="xray"][aria-pressed="true"]   { background: var(--peek-owned-soft); color: var(--peek-owned); }
+.peek-tray button[data-action="stop"] { color: var(--peek-stop); }
+.peek-tray button[hidden] { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .peek-tray,
+  .peek-tray-inner,
+  .peek-pill .peek-mark { transition-duration: 0ms; }
+  .peek-pill[data-state="loading"] .peek-mark { animation: none; }
+}
 
 /* ---------------------------------------------------------------- card */
 
@@ -230,7 +318,7 @@ export const OVERLAY_STYLES = /* css */ `
 .peek-tag[data-tone="block"]  { background: var(--peek-block-soft); color: var(--peek-block); }
 .peek-tag[data-tone="shared"] { background: var(--peek-shared-soft); color: var(--peek-shared); }
 .peek-tag[data-tone="media"]  { background: var(--peek-media-soft); color: var(--peek-media); }
-.peek-tag[data-tone="warn"]   { background: rgba(184, 50, 12, 0.12); color: var(--peek-warn); }
+.peek-tag[data-tone="warn"]   { background: rgba(184, 50, 12, 0.12); color: var(--peek-stop); }
 .peek-tag[data-tone="quiet"]  { background: var(--peek-surface-2); color: var(--peek-text-dim); }
 
 .peek-actions {
@@ -347,7 +435,7 @@ export const OVERLAY_STYLES = /* css */ `
   background: var(--peek-owned);
 }
 
-.peek-coverage-bar[data-low="true"] i { background: var(--peek-warn); }
+.peek-coverage-bar[data-low="true"] i { background: var(--peek-stop); }
 
 .peek-coverage-label {
   display: flex;
@@ -424,7 +512,7 @@ export const OVERLAY_STYLES = /* css */ `
   white-space: nowrap;
 }
 
-.peek-row-note[data-tone="warn"] { color: var(--peek-warn); font-weight: 600; }
+.peek-row-note[data-tone="warn"] { color: var(--peek-stop); font-weight: 600; }
 
 .peek-panel-foot {
   padding: 8px 13px;
@@ -438,7 +526,7 @@ export const OVERLAY_STYLES = /* css */ `
   padding: 8px 10px;
   border-radius: 6px;
   background: rgba(184, 50, 12, 0.10);
-  color: var(--peek-warn);
+  color: var(--peek-stop);
   font-size: 11.5px;
   font-weight: 600;
 }
