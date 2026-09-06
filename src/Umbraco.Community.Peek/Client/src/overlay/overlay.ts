@@ -60,7 +60,6 @@ export class PeekOverlay {
     this.#bootstrap = bootstrap;
 
     this.#host = el('div', { 'data-peek-ui': 'root' });
-    this.#host.style.setProperty('display', 'contents');
     this.#root = this.#host.attachShadow({ mode: 'open' });
     this.#root.append(el('style', { text: OVERLAY_STYLES }));
 
