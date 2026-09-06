@@ -1,12 +1,12 @@
-# Peek - Content Inspector for Umbraco
+# Peek: Content Inspector for Umbraco
 
 **View Source, but for content.**
 
-Open your site, arm Peek, hover anything. It tells you which node the text came from, which property
-alias, which doctype, which culture, who last edited it and when — then deep links you straight to
+Open your site, arm Peek, hover over anything. It tells you which node the text came from, which property
+alias, which doctype, which culture, who last edited it and when, then deep links you straight to
 that field in the backoffice, with the right variant open and the property pulsing.
 
-It is browser devtools, except the tree it inspects is your content, not your DOM.
+It is like the browser devtools, except the tree it inspects is your content, not your DOM.
 
 Then it runs the question backwards: **which properties on this site never reach a page at all?**
 
@@ -14,46 +14,43 @@ Then it runs the question backwards: **which properties on this site never reach
 
 ## Status
 
-A working sketch, built against Umbraco 18.1.1 / .NET 10. Everything described below runs — there is
+A working sketch, built against Umbraco 18.1.1 / .NET 10. Everything described below runs, there is
 a test site in this repository that builds a demo content model on first boot and exercises every
 path. It is not a released package: see [Known gaps](#known-gaps).
 
 ## Why
 
-Every person working on an Umbraco site asks "where does this text come from?" several times a day.
-Today the answer is: guess the node, grep the templates, or ask the developer who built it three
-years ago and left. Block-based content made it worse — the text you are looking at may live four
-levels below the page that owns the URL — and Umbraco 18's reusable Elements make it worse again,
-because now the answer might be "on forty other pages too".
+Do you often ask yourself "where does this text come from?".
+Normally you would guess the node, grep the templates, or ask the developer who built it three years ago and left.
+Block-based content made it worse, the text you are looking at may live four levels below the page that owns the URL, and Umbraco 18's reusable Elements make it worse again, because now the answer might be "on forty other pages too".
 
-The closest thing in the ecosystem is a page-level edit link. That is node granularity. Peek is
-property granularity, plus the inverse lookup.
+The closest thing in the ecosystem is a page-level edit link. That is node granularity. Peek is property granularity, plus the inverse lookup.
 
-## What it does
+## Features
 
 ### On the front end
 
 A floating pill, visible only to signed-in backoffice users with content access. Arm it with the
 pill or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd>, then hover.
 
-| Outline | Meaning |
-| --- | --- |
-| Blue | A property on the node that owns this URL |
-| Purple | An item inside a Block List or Block Grid |
-| Amber | Shared content — a Library element or a picked node. Edits ripple elsewhere. |
-| Grey dashed | Rendered text Peek could not attribute |
-| `?` badge | Matched, but more than one possible source |
+| Outline     | Meaning                                                                     |
+| ----------- | --------------------------------------------------------------------------- |
+| Blue        | A property on the node that owns this URL                                   |
+| Purple      | An item inside a Block List or Block Grid                                   |
+| Amber       | Shared content, a Library element or a picked node. Edits ripple elsewhere. |
+| Grey dashed | Rendered text Peek could not attribute                                      |
+| `?` badge   | Matched, but more than one possible source                                  |
 
 Amber is the important one. It is not a warning that something is wrong; it is a warning that the
 blast radius is bigger than the page you are looking at.
 
-The hover card shows the **breadcrumb** — `Home › contentBlocks[2] › blockTitle` — which is the
+The hover card shows the **breadcrumb**, `Home › contentBlocks[2] › blockTitle`, which is the
 answer people are actually asking for. Plus culture, publish state (`draft pending` answers half the
 "why isn't my change showing" questions on its own), last editor, and one-click copy of the alias,
 the node GUID, the Razor accessor, or a pre-filled bug report.
 
 **X-ray mode** outlines everything at once and opens a panel with filter chips, the honest coverage
-number, and — the interesting part — the list of properties that have a value and did not make it
+number, and, the interesting part, the list of properties that have a value and did not make it
 into the page.
 
 ### In the backoffice
@@ -125,7 +122,7 @@ Nothing else. The composer wires itself up. Configuration is optional:
     "Enabled": true,
     "Inspector": {
       "Enabled": true,
-      "RequiredSections": [ "content" ],
+      "RequiredSections": ["content"],
       "MaxDepth": 4,
       "MaxCandidates": 2500
     },
@@ -140,13 +137,13 @@ Nothing else. The composer wires itself up. Configuration is optional:
       "RetentionDays": 60,
       "MinimumWindowDays": 14,
       "MinimumObservedPageViews": 500,
-      "RendersOutsidePageRequests": [ "*.seoKeywords", "blogPost.emailIntro" ]
+      "RendersOutsidePageRequests": ["*.seoKeywords", "blogPost.emailIntro"]
     }
   }
 }
 ```
 
-Sampling is **off by default** — the inspector works without it, and it is only meaningful once
+Sampling is **off by default**, the inspector works without it, and it is only meaningful once
 somebody has decided to run an audit.
 
 `RendersOutsidePageRequests` is the safety valve that makes the report trustworthy. A property that
@@ -179,9 +176,6 @@ Being honest about these is the point, because the whole product rests on trust 
   is matched; the block content is not.
 - **Block Grid areas** are walked, but the demo site only exercises Block List. The code path is
   shared and covered by the same collector.
-- **The overlay UI has not been verified in a browser** in this build — the matching logic it depends
-  on has headless tests (`npm test`), and the server half is covered by the NUnit suite, but nobody
-  has yet watched the pill and the hover card behave on a real page.
 - **No visual regression tests**, no localisation, and the backoffice deep-link selector for pulsing
   a property is a best guess at the current workspace DOM.
 - **Not tested against Umbraco Cloud.** In particular the CDN/proxy layer in front of a Cloud site
