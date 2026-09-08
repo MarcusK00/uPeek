@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc && vite build",
     "watch": "tsc && vite build --watch",
+    "postwatch": "git restore --worktree -- ../wwwroot/App_Plugins/Peek",
     "check": "tsc --noEmit",
     "generate-client": "echo \"Point this at a running site once you want a generated OpenAPI client: npx @hey-api/openapi-ts -i https://localhost:44339/umbraco/openapi/peek.json -o src/api/generated\"",
     "test": "node --import ./test/register.mjs --test \"src/**/*.test.ts\""
