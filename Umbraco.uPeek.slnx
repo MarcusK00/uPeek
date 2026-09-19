@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Umbraco.Community.uPeek/Umbraco.Community.uPeek.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Umbraco.Community.uPeek.Tests/Umbraco.Community.uPeek.Tests.csproj" />
+  </Folder>
+  <Folder Name="/testsite/">
+    <Project Path="testsite/uPeek.TestSite/uPeek.TestSite.csproj" />
+  </Folder>
+</Solution>

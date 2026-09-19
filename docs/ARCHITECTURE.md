@@ -30,7 +30,7 @@ and `AddWebsite()`, so a composer can replace ordinary services — but collecti
 composers. A package cannot decorate them from a composer at all.
 
 **What it costs:** the walk includes values a template never asked for. A property that the template
-reads and deliberately drops looks the same as one the template never touched. Peek therefore never
+reads and deliberately drops looks the same as one the template never touched. uPeek therefore never
 claims "unused" — it reports **"0 observed renders"**, which is exactly what it measured.
 
 **Bounds:** the walk is limited three ways — `MaxDepth`, `MaxCandidates`, and a visited-key set. A
@@ -82,11 +82,11 @@ which is worse than either answer alone.
 
 This looks redundant and is not.
 
-**Management API** (`/umbraco/peek/api/v1/…`) — the backoffice UI. Authenticated the way every
+**Management API** (`/umbraco/upeek/api/v1/…`) — the backoffice UI. Authenticated the way every
 Management API endpoint is: a bearer token issued to the backoffice SPA. Registers its own OpenAPI
 document so `npm run generate-client` works.
 
-**Inspector endpoints** (`/umbraco/peek/inspect/…`) — the overlay. The overlay runs on the *public*
+**Inspector endpoints** (`/umbraco/upeek/inspect/…`) — the overlay. The overlay runs on the *public*
 site, where the backoffice bearer token does not exist. What does exist is the backoffice auth
 cookie: Umbraco issues `UMB_UCONTEXT` with `Path=/`, so it is sent on front-end requests too. These
 endpoints therefore authorise through `IPeekAuthorizer`, which validates that cookie and then checks
@@ -129,7 +129,7 @@ Three checks, then `next()`:
    decryption)
 3. Is this request being sampled?
 
-If all three miss, the response stream is never wrapped and the bytes are untouched. Installing Peek
+If all three miss, the response stream is never wrapped and the bytes are untouched. Installing uPeek
 costs an anonymous visitor nothing measurable.
 
 ### What gets injected
@@ -138,7 +138,7 @@ Only for an authorised viewer, and only a **bootstrap** — the page key, cultur
 Not the manifest. Arming inspect mode is a separate authenticated call, so opening a page as an
 editor does not ship a dump of your content model to the browser.
 
-The response is only ever **appended to**, just before `</body>`. Peek never rewrites existing
+The response is only ever **appended to**, just before `</body>`. uPeek never rewrites existing
 markup. An earlier design injected `data-peek-*` attributes into the HTML; that was dropped because
 it means reserialising somebody else's document, and the same information travels perfectly well in
 a JSON payload the client matches for itself.
@@ -159,17 +159,17 @@ sampled request ──► PeekObservationRecorder ──► in-memory buffer (bo
 
 Three tables, created by a standard Umbraco migration plan:
 
-- `peekPropertyObservation` — daily rollup per (contentType, property, culture) with observed /
+- `upeekPropertyObservation` — daily rollup per (contentType, property, culture) with observed /
   rendered / empty / unmatchable counters.
-- `peekRenderLocation` — where a property was last seen rendering. This is what makes reverse lookup
+- `upeekRenderLocation` — where a property was last seen rendering. This is what makes reverse lookup
   possible.
-- `peekSampleDay` — the denominator. Without it "0 renders" is meaningless.
+- `upeekSampleDay` — the denominator. Without it "0 renders" is meaningless.
 
 Observations are telemetry, not transactional data: losing the last few seconds on a recycle is fine
 and far preferable to a row per page view. A full buffer **drops** rather than growing without bound,
 and the dropped count is logged and surfaced in the sampling status so it cannot fail silently.
 
-A failed Peek migration logs an error and lets the site boot. The reporting tier degrades to
+A failed uPeek migration logs an error and lets the site boot. The reporting tier degrades to
 unavailable; the inspector does not use these tables at all.
 
 ---
@@ -183,7 +183,7 @@ and every other row becomes worthless.
   progress, not verdicts.
 - **One confirmed render clears a property**, regardless of sample size. Absence of evidence is the
   weak direction; presence is not.
-- **Unmatchable beats orphan.** If every observation with a value was one Peek was not allowed to
+- **Unmatchable beats orphan.** If every observation with a value was one uPeek was not allowed to
   search for, the absence of a match says nothing, and the verdict is `NotMeasurable`.
 - **Per-culture always.** On a Danish multilingual site "renders on da-DK but never on en-GB" is a
   real and common finding, and a collapsed count would hide exactly the thing worth knowing.
@@ -202,10 +202,10 @@ a stylesheet was never recorded as a relation.
 
 Untested, and the one place a deployment could go wrong.
 
-Peek sets `no-store` and `Vary: Cookie` on any response it modifies, which is correct for a
+uPeek sets `no-store` and `Vary: Cookie` on any response it modifies, which is correct for a
 well-behaved shared cache. A CDN configured to ignore `Vary`, or to strip cookies before deciding
 cacheability, could still serve an instrumented page to an anonymous visitor. Before running this on
-a Cloud site, confirm the proxy layer honours `Vary: Cookie` — or set `Peek:Inspector:Enabled` to
+a Cloud site, confirm the proxy layer honours `Vary: Cookie` — or set `uPeek:Inspector:Enabled` to
 false in the environments fronted by a cache and use it in staging only.
 
 ---

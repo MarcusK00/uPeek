@@ -1,0 +1,16 @@
+﻿@using uPeek.TestSite.Demo
+@using Umbraco.Cms.Core.Models.Blocks
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
+@{
+    Layout = "~/Views/_PeekLayout.cshtml";
+    var culture = UmbracoContext?.PublishedRequest?.Culture;
+}
+
+<h1>@(Model.Value<string>(PeekDemoAliases.Properties.PageTitle, culture: culture))</h1>
+<p class="intro">@(Model.Value<string>(PeekDemoAliases.Properties.Introduction, culture: culture))</p>
+
+@{ var blocks = Model.Value<BlockListModel>(PeekDemoAliases.Properties.ContentBlocks, culture: culture); }
+@if (blocks is not null)
+{
+    @await Html.PartialAsync("~/Views/Partials/_PeekBlocks.cshtml", blocks)
+}

@@ -17,13 +17,13 @@ be the easy half, not the hard half.
 | **1** | Deep link into the backoffice, right variant, pulsed property | done |
 | **1** | Safe by default: anonymous HTML untouched, section-gated, cache-safe | done |
 | **1** | Pinning, keyboard traversal, ambiguity handling, copy actions | done |
-| **1** | X-ray mode with coverage and filter chips | done |
+| **1** | Advanced mode with coverage and filter chips | done |
 | **2** | Render sampling with buffered flush and retention | done |
 | **2** | Orphan report with thresholds, exclusions and per-culture verdicts | done |
 | **2** | Doctype "Usage" view | done |
 | **2** | Reverse lookup (property → URLs) | done |
 | **2** | Media "Used on" via relation tracking | done |
-| **2** | Coverage map per page | done (the X-ray panel is this) |
+| **2** | Coverage map per page | done (the Advanced panel is this) |
 | **2** | Observed render counts on the media view | partial — references are exact, the sampled count is stubbed at 0 |
 
 ---
@@ -113,8 +113,8 @@ Sell it as an agency onboarding and audit tool, not as an editor nicety. Orphan 
 belongs to the same story — "here is the audit report you hand the client in week one" — rather than
 being a separate paid feature that has to justify itself.
 
-**On naming.** Nobody searches the Marketplace for "Peek". Keep the codename for the brand and put
-the descriptive term in the listing: *Peek — Content Inspector for Umbraco*. Unglamorous, findable.
+**On naming.** Nobody searches the Marketplace for "uPeek". Keep the codename for the brand and put
+the descriptive term in the listing: *uPeek — Content Inspector for Umbraco*. Unglamorous, findable.
 
 **On core.** The read-log half is essentially content telemetry, and HQ has an obvious reason to want
 that in core. Ship the overlay free and open to establish the ground; monetise the reporting and
