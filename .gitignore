@@ -24,8 +24,8 @@ testsite/**/appsettings.Local.json
 *.sqlite.db-wal
 
 ## The compiled client bundle IS committed so the package runs without a node toolchain.
-## (see src/Umbraco.Community.Peek/Client/README.md)
-!src/Umbraco.Community.Peek/wwwroot/App_Plugins/Peek/**
+## (see src/Umbraco.Community.uPeek/Client/README.md)
+!src/Umbraco.Community.uPeek/wwwroot/App_Plugins/uPeek/**
 
 ## OS
 .DS_Store

@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <StaticWebAssetBasePath>/</StaticWebAssetBasePath>
+    <RootNamespace>Umbraco.Community.uPeek</RootNamespace>
+    <AssemblyName>Umbraco.Community.uPeek</AssemblyName>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Package">
+    <IsPackable>true</IsPackable>
+    <PackageId>Umbraco.Community.uPeek</PackageId>
+    <Product>uPeek</Product>
+    <Title>uPeek — Content Inspector for Umbraco</Title>
+    <Description>
+      View Source, but for content. Hover anything on the front end and uPeek tells you which node,
+      property, doctype and culture it came from — then deep links you straight to that field in the
+      backoffice. Includes usage reporting: which properties actually reach a page, and which do not.
+    </Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Umbraco.Cms.Api.Common" />
+    <PackageReference Include="Umbraco.Cms.Api.Management" />
+    <PackageReference Include="Umbraco.Cms.Web.Common" />
+    <PackageReference Include="Umbraco.Cms.Web.Website" />
+
+    <!--
+      Microsoft.AspNetCore.OpenApi comes in transitively via the Umbraco packages above, but we take a
+      direct reference because PeekOpenApiComposer uses its types. Without it, NuGet can resolve a
+      different patch here than the host site resolves, and the mismatched Microsoft.OpenApi versions
+      make the uPeek OpenAPI document silently fail to register.
+    -->
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+
+    <!-- The response matcher parses rendered HTML rather than regex-ing it. -->
+    <PackageReference Include="AngleSharp" />
+  </ItemGroup>
+
+  <ItemGroup Label="Client">
+    <!-- The TypeScript sources are not shipped; the built bundle in wwwroot is. -->
+    <Content Remove="Client\**" />
+    <None Include="Client\**" Exclude="Client\node_modules\**;Client\dist\**" Pack="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

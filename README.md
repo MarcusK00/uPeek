@@ -1,8 +1,8 @@
-# Peek: Content Inspector for Umbraco
+# uPeek: Content Inspector for Umbraco
 
 **View Source, but for content.**
 
-Open your site, arm Peek, hover over anything. It tells you which node the text came from, which property
+Open your site, arm uPeek, hover over anything. It tells you which node the text came from, which property
 alias, which doctype, which culture, who last edited it and when, then deep links you straight to
 that field in the backoffice, with the right variant open and the property pulsing.
 
@@ -24,7 +24,7 @@ Do you often ask yourself "where does this text come from?".
 Normally you would guess the node, grep the templates, or ask the developer who built it three years ago and left.
 Block-based content made it worse, the text you are looking at may live four levels below the page that owns the URL, and Umbraco 18's reusable Elements make it worse again, because now the answer might be "on forty other pages too".
 
-The closest thing in the ecosystem is a page-level edit link. That is node granularity. Peek is property granularity, plus the inverse lookup.
+The closest thing in the ecosystem is a page-level edit link. That is node granularity. uPeek is property granularity, plus the inverse lookup.
 
 ## Features
 
@@ -38,7 +38,7 @@ pill or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd>, then hover.
 | Blue        | A property on the node that owns this URL                                   |
 | Purple      | An item inside a Block List or Block Grid                                   |
 | Amber       | Shared content, a Library element or a picked node. Edits ripple elsewhere. |
-| Grey dashed | Rendered text Peek could not attribute                                      |
+| Grey dashed | Rendered text uPeek could not attribute                                      |
 | `?` badge   | Matched, but more than one possible source                                  |
 
 Amber is the important one. It is not a warning that something is wrong; it is a warning that the
@@ -47,24 +47,24 @@ blast radius is bigger than the page you are looking at.
 The hover card shows the **breadcrumb**, `Home › contentBlocks[2] › blockTitle`, which is the
 answer people are actually asking for. Plus culture, publish state (`draft pending` answers half the
 "why isn't my change showing" questions on its own), last editor, and one-click copy of the alias,
-the node GUID, the Razor accessor, or a pre-filled bug report.
+the node GUID, or the Razor accessor.
 
-**X-ray mode** outlines everything at once and opens a panel with filter chips, the honest coverage
+**Advanced mode** opens a panel with filter chips, the honest coverage
 number, and, the interesting part, the list of properties that have a value and did not make it
 into the page.
 
 ### In the backoffice
 
-Peek does not add a section. The reports live where the question is already being asked:
+uPeek does not add a section. The reports live where the question is already being asked:
 
 - **Document Type workspace → "Usage"** — per-property render counts with a per-culture breakdown.
   This is the placement that sells it: you are staring at `seoKeywords` in the doctype editor and the
   tab next to Design tells you it has never rendered.
 - **Media workspace → "Used on"** — every node referencing this item, or a plain "not referenced
   anywhere". Closes the "can I delete this?" ticket that currently has no answer.
-- **Settings → Peek dashboard** — the site-wide report, with reverse lookup as its centrepiece: pick
+- **Settings → uPeek dashboard** — the site-wide report, with reverse lookup as its centrepiece: pick
   a property, get every URL where it was observed rendering.
-- **Content tree → "Inspect on site"** — opens the front end with Peek already armed.
+- **Content tree → "Inspect on site"** — opens the front end with uPeek already armed.
 
 ## Safety
 
@@ -74,21 +74,21 @@ These are properties of the design, not aspirations:
   cookie and, on a miss, calls the next delegate without wrapping the response stream at all.
 - **Real authorisation, not "has a session".** The map leaks content structure, so access is gated on
   actual Content-section access, checked per request.
-- **Cache-safe.** When Peek changes the bytes, it sets `no-store` and `Vary: Cookie`, so an editor's
+- **Cache-safe.** When uPeek changes the bytes, it sets `no-store` and `Vary: Cookie`, so an editor's
   page view cannot poison a shared cache with instrumented markup.
-- **404, not 401.** The inspector endpoints do not reveal that Peek is installed.
+- **404, not 401.** The inspector endpoints do not reveal that uPeek is installed.
 - **The report never says "delete this."** It says "0 observed renders", refuses to draw conclusions
   below a minimum sample size, and lets you exclude properties that render outside page requests.
 
 ## Getting started
 
 ```bash
-git clone <this repo>
-cd Umbraco.Peek
+git clone https://github.com/MarcusK00/uPeek.git
+cd uPeek
 dotnet build
 dotnet test
 
-cd testsite/Peek.TestSite
+cd testsite/uPeek.TestSite
 dotnet run
 ```
 
@@ -102,7 +102,7 @@ and no template renders. That last one is the demo.
 To rebuild the client bundles:
 
 ```bash
-cd src/Umbraco.Community.Peek/Client
+cd src/Umbraco.Community.uPeek/Client
 npm install
 npm run build     # or: npm run watch
 npm test
@@ -111,14 +111,14 @@ npm test
 ## Using it in your own site
 
 ```xml
-<ProjectReference Include="..\Umbraco.Community.Peek\Umbraco.Community.Peek.csproj" />
+<ProjectReference Include="..\Umbraco.Community.uPeek\Umbraco.Community.uPeek.csproj" />
 ```
 
 Nothing else. The composer wires itself up. Configuration is optional:
 
 ```json
 {
-  "Peek": {
+  "uPeek": {
     "Enabled": true,
     "Inspector": {
       "Enabled": true,
@@ -148,20 +148,20 @@ somebody has decided to run an audit.
 
 `RendersOutsidePageRequests` is the safety valve that makes the report trustworthy. A property that
 only renders in an order-confirmation email, a sitemap, an RSS feed or a scheduled job is invisible
-to page-view sampling by construction. Listing it here means Peek reports it as "excluded" rather
+to page-view sampling by construction. Listing it here means uPeek reports it as "excluded" rather
 than as a dead property.
 
 ## Repository layout
 
 ```
-src/Umbraco.Community.Peek/     the package (RCL)
+src/Umbraco.Community.uPeek/     the package (RCL)
   Inspection/                   candidate collection, matching, the overlay middleware
   Observations/                 sampling buffer, flush service, migrations, repository
   Reporting/                    the usage report and reverse lookup
   Api/                          Management API for the backoffice UI
   Client/                       TypeScript: backoffice extensions + the front-end overlay
 tests/                          NUnit suite for the server matcher and URL builder
-testsite/Peek.TestSite/         a runnable Umbraco 18 site with generated demo content
+testsite/uPeek.TestSite/         a runnable Umbraco 18 site with generated demo content
 docs/                           architecture, UI spec, roadmap
 ```
 

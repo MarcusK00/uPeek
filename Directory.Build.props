@@ -9,14 +9,14 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
 
-  <!-- Shared package metadata. Only the packable project (src/Umbraco.Community.Peek) opts in. -->
+  <!-- Shared package metadata. Only the packable project (src/Umbraco.Community.uPeek) opts in. -->
   <PropertyGroup>
     <Authors>Marcus Krogh</Authors>
     <Company>Umbraco HQ</Company>
     <Copyright>Copyright © $([System.DateTime]::Now.Year)</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/mkrogh/Umbraco.Peek</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/mkrogh/Umbraco.Peek</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/MarcusK00/uPeek</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/MarcusK00/uPeek</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageTags>umbraco umbraco-marketplace inspector content devtools</PackageTags>
     <VersionPrefix>0.1.0</VersionPrefix>

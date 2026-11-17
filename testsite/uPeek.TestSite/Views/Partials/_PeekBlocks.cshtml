@@ -1,0 +1,48 @@
+@using Umbraco.Cms.Core.Strings
+@using uPeek.TestSite.Demo
+@using Umbraco.Cms.Core.Models.Blocks
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage<BlockListModel>
+@inject Umbraco.Cms.Core.Models.PublishedContent.IPublishedValueFallback PublishedValueFallback
+@*
+    Renders the demo Block List.
+
+    Note what is NOT here: seoKeywords. Every page fills it in and no template renders it, which is
+    the exact situation uPeek's usage report exists to surface. Resist the urge to "fix" it.
+
+    Blocks are IPublishedElement, not IPublishedContent, so Value<T> takes the fallback service
+    explicitly — the convenience overload only exists for IPublishedContent.
+*@
+@{
+    var culture = UmbracoContext?.PublishedRequest?.Culture;
+}
+
+@foreach (var block in Model)
+{
+    var content = block.Content;
+
+    switch (content.ContentType.Alias)
+    {
+        case PeekDemoAliases.ElementTypes.HeroBlock:
+            <section class="block hero">
+                <h2>@(content.Value<string>(PublishedValueFallback, PeekDemoAliases.Properties.Heading, culture: culture))</h2>
+                <p>@(content.Value<string>(PublishedValueFallback, PeekDemoAliases.Properties.Subheading, culture: culture))</p>
+            </section>
+            break;
+
+        case PeekDemoAliases.ElementTypes.TextBlock:
+            <section class="block">
+                <h2>@(content.Value<string>(PublishedValueFallback, PeekDemoAliases.Properties.Title, culture: culture))</h2>
+                @(content.Value<IHtmlEncodedString>(PublishedValueFallback, PeekDemoAliases.Properties.BodyText, culture: culture))
+            </section>
+            break;
+
+        case PeekDemoAliases.ElementTypes.CallToActionBlock:
+            <section class="block cta">
+                @* The link is invariant on purpose, so uPeek can label it "all languages". *@
+                <a href="@(content.Value<string>(PublishedValueFallback, PeekDemoAliases.Properties.Link))">
+                    @(content.Value<string>(PublishedValueFallback, PeekDemoAliases.Properties.Label, culture: culture))
+                </a>
+            </section>
+            break;
+    }
+}
